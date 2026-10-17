@@ -1,4 +1,4 @@
-/* SikkenWorks B1 V2.5. GPL-3.0-only, custom FM1 executable.
+/* SikkenWorks B1 V2.7. GPL-3.0-only, custom FM1 executable.
  * Felucca platform HAL © Leo Kuroshita / Hügelton Instruments.
  * FLASH POLICY: OTA staging plus B1-owned, dynamically selected verified-safe two-sector journal.
  * BEETLE project data at 0x97000..0xDFFFF is never modified.
@@ -32,7 +32,7 @@
 #define FELUCCA_OTA 1
 #define FELUCCA_OTA_DRYRUN 0
 #define FELUCCA_UAC 0
-#define FELUCCA_ID "FM-1_2125"
+#define FELUCCA_ID "FM-1_2127"
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
 #define HALF_FRAMES 128u
 #include "usb.c"
@@ -132,8 +132,9 @@ void fm1_alnk0_irq(void){
      b1_pcm[t*2u]=sample;b1_pcm[t*2u+1u]=sample;
     }
    }else{
-    b1_performance_keys(&b1_keys,&b1_audio,ui_page==6u?0u:fm1_in.notes);
-    b1_drain_midi();
+    uint32_t keys=ui_page==6u?0u:fm1_in.notes;
+    if(keys!=b1_keys.pressed)b1_performance_keys(&b1_keys,&b1_audio,keys);
+    if(mi_r!=mi_w || midi_in_overflow)b1_drain_midi();
     b1_performance_render(&b1_keys,&b1_audio,b1_pcm,HALF_FRAMES);
    }
    /* Buffer-ownership check. Drop the block rather than touch a live DMA half. */
@@ -336,7 +337,7 @@ static void b1_controls(uint32_t pressed){
  }
  if(pressed&(1u<<2)){ui_page=1;changed=1;}
  if(pressed&(1u<<4)){ui_page=2;changed=1;}
- if(pressed&(1u<<5)){if(ui_page!=6u){b1_release_all(&b1_keys,&b1_audio);chord_quality=b1_keys.chord_map[chord_cursor];}ui_page=6;changed=1;}
+ if(pressed&(1u<<5)){if(ui_page!=6u){b1_release_all(&b1_keys,&b1_audio);chord_quality=b1_keys.chord_map[chord_cursor];project_error=0;}ui_page=6;changed=1;}
  if(pressed&(1u<<6)){ui_page=3;changed=1;}
  if(pressed&(1u<<11)){ui_page=4;changed=1;}
  if(pressed&(1u<<7)){ui_page=5;b1_audio_diag=0u;b1_test_tone=0u;changed=1;}
@@ -345,7 +346,9 @@ static void b1_controls(uint32_t pressed){
   if(b1_shift_octave(&b1_keys,&b1_audio,direction,fm1_in.notes)){changed=1;dirty_project=1u;}
  }
  if(pressed&(1u<<3)){
-  if(ui_page==3){struct b1_range *r=&b1_keys.range[selected_range];r->type=(uint8_t)(r->type==B1_ORGAN?B1_CHORD:r->type==B1_CHORD?B1_DISABLED:B1_ORGAN);changed=1;dirty_project=1;}
+  if(ui_page==3){struct b1_range *r=&b1_keys.range[selected_range];r->type=(uint8_t)(r->type==B1_ORGAN?B1_CHORD:r->type==B1_CHORD?B1_DISABLED:B1_ORGAN);
+   if(r->type==B1_CHORD)b1_keys.chord_mode=2u;
+   changed=1;dirty_project=1;}
   /* SEL is physical front-panel SEL/SCL button (id 3), not ALGORITHM. */
   if(ui_page==4 && (b1_saved.archive.mask&(1u<<project_cursor))){
    if(b1_project_apply(&b1_saved.archive.projects[project_cursor],&b1_keys,&b1_audio)){
@@ -437,7 +440,18 @@ static void b1_controls(uint32_t pressed){
   if(enc[3]){edit_name[name_cursor]=' ';changed=1;}
  }else if(ui_page==6){
   if(enc[0]){chord_cursor=bounded_add(chord_cursor,enc[0],0,B1_KEYS-1);chord_quality=b1_keys.chord_map[chord_cursor];changed=1;}
-  if(enc[1]){chord_quality=bounded_add(chord_quality,enc[1],0,B1_CHORD_TYPES-1);b1_keys.chord_map[chord_cursor]=chord_quality;changed=1;dirty_project=1;}
+  if(enc[1]){chord_quality=bounded_add(chord_quality,enc[1],0,B1_CHORD_TYPES-1);changed=1;}
+  if(enc[2]){
+   if(!b1_set_chord_enabled(&b1_keys,&b1_audio,(uint8_t)(enc[2]>0))){project_error=-15;}
+   else {project_error=0;dirty_project=1u;selected_range=2u;
+    for(uint8_t ci=0u;ci<B1_RANGES;ci++)if(b1_keys.range[ci].type==B1_CHORD){selected_range=ci;break;}
+    chord_cursor=b1_keys.range[selected_range].lo;chord_quality=b1_keys.chord_map[chord_cursor];}
+   changed=1;
+  }
+  if(enc[3]&&b1_chord_enabled(&b1_keys)){
+   uint8_t next=bounded_add(b1_chord_attack(&b1_keys),enc[3],0,100);
+   if(b1_set_chord_attack(&b1_keys,next)){dirty_project=1u;changed=1;}
+  }
  }else if(ui_page==5){
   if(sel){b1_audio_diag=sel>0u;changed=1; if(!b1_audio_diag)b1_test_tone=0u;}
   if(b1_audio_diag){
@@ -547,8 +561,10 @@ void fm1_cstart(void){
    uint32_t chord_edges=fm1_input_note_edges();
    if(chord_edges){
     for(uint8_t k=0;k<B1_KEYS;k++)if(chord_edges&(1u<<k)){
-     /* Only keys assigned to CHORD ranges are editable as chord selectors. */
-     if(b1_assign_chord_key(&b1_keys,k,chord_quality)){
+     /* Only active selectors may be assigned; K3 ON creates a selector range for new projects. */
+     if(!b1_chord_enabled(&b1_keys)){
+      project_error=0; /* With ASSIGN OFF, keep the normal keyboard playable. */
+     }else if(b1_assign_chord_key(&b1_keys,k,chord_quality)){
       chord_cursor=k;dirty_project=1u;project_error=0;
      }else project_error=-14;
      b1_ui_dirty=1u;

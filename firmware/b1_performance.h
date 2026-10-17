@@ -19,8 +19,11 @@ struct b1_performance {
  struct b1_held held[B1_KEYS];
  uint8_t chord_map[B1_KEYS];
  uint32_t touch[B1_KEYS],order;
- uint8_t global_octave,scale_root,scale_type,keylock,guide,selected_bank;
+ uint8_t global_octave,scale_root,scale_type,keylock,guide,selected_bank,chord_mode;
+ /* 0=legacy auto, 1=OFF, 2=ON; never enable a selector without a range. */
  uint32_t pressed,clock,random_state;
+ /* Runtime only: chord events pending, NOT part of project storage. */
+ uint32_t pending_mask;
 };
 struct b1_project {
  uint32_t magic,version;
@@ -35,7 +38,7 @@ struct b1_project {
  /* V6 adds all FX settings and live performance setup. */
  uint8_t delay_mix,delay_time,delay_feedback,delay_spread;
  uint8_t reverb_type,reverb_mix,reverb_decay,reverb_damp;
- uint8_t global_octave,selected_bank;
+ uint8_t global_octave,selected_bank,chord_mode; /* previously zeroed V6 padding byte */
  uint32_t checksum;
 };
 void b1_performance_init(struct b1_performance *p);
@@ -50,6 +53,10 @@ void b1_performance_render(struct b1_performance *p,struct b1_engine *e,int16_t 
 void b1_release_all(struct b1_performance *p,struct b1_engine *e);
 /* Actual physical note-to-CHORD assignment and octave control; host-testable. */
 uint8_t b1_assign_chord_key(struct b1_performance *p,uint8_t physical_key,uint8_t chord_quality);
+uint8_t b1_chord_enabled(const struct b1_performance *p);
+uint8_t b1_set_chord_enabled(struct b1_performance *p,struct b1_engine *e,uint8_t on);
+uint8_t b1_chord_attack(const struct b1_performance *p);
+uint8_t b1_set_chord_attack(struct b1_performance *p,uint8_t value);
 uint8_t b1_shift_octave(struct b1_performance *p,struct b1_engine *e,int8_t change,uint32_t held_keys);
 uint8_t b1_active_chord(const struct b1_performance *p);
 int b1_project_valid(const struct b1_project *pr);

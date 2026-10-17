@@ -134,7 +134,7 @@
   },
   {
     "name": "08-percussion",
-    "raw_sha256": "273eaa3937fc4ac5ff9cebe05ffefeb98f0abb51f73003314290c77d50b11899",
+    "raw_sha256": "24c47ea8b3622d4773a2ce0384a268ca6482001e3fc2ea256c7f3d5d440c2b6b",
     "png": "08-percussion.png",
     "pixels": "240x240",
     "origin": "firmware/b1_ui.c"
@@ -148,29 +148,43 @@
   },
   {
     "name": "10-ranges-chord",
-    "raw_sha256": "a1190cd31196062d1c93b96211417d680714fa2cc3ca974f855e37942ea8c14a",
+    "raw_sha256": "d169e21d0dd2147da4ed91cfae6cb32508f09140676f6f9bfa7a492c09766609",
     "png": "10-ranges-chord.png",
     "pixels": "240x240",
     "origin": "firmware/b1_ui.c"
   },
   {
     "name": "10b-ranges-chord-humanized",
-    "raw_sha256": "a1190cd31196062d1c93b96211417d680714fa2cc3ca974f855e37942ea8c14a",
+    "raw_sha256": "4ab76c812bc8147466f6b137e31c8f772bd33a2e276d87aad569911a9bf5bddf",
     "png": "10b-ranges-chord-humanized.png",
     "pixels": "240x240",
     "origin": "firmware/b1_ui.c"
   },
   {
     "name": "11-chord-assignment",
-    "raw_sha256": "2da5a220841be88d4c0d37654e36ad2e9d96ef2b0ae4dba4f5cbfe6d0c7cd877",
+    "raw_sha256": "7d19e79a0f61ec609f9ddc00504a4eab1e67b9e7abf74bed0b003406995d52eb",
     "png": "11-chord-assignment.png",
     "pixels": "240x240",
     "origin": "firmware/b1_ui.c"
   },
   {
     "name": "11b-chord-assigned-min7",
-    "raw_sha256": "5ef2fda64390fbe132194cf057abf41e78218e32f9bb5f740025a6d21f4359ca",
+    "raw_sha256": "c82c58f53e8c44688d008ceac5c2299ec8423ac8c939bb2f050aa63d7d489eac",
     "png": "11b-chord-assigned-min7.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "11c-chord-assign-off",
+    "raw_sha256": "8dedc9552fc6744617efcce04e2fbc84c158d6696bb523f66f506774900d8885",
+    "png": "11c-chord-assign-off.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "11d-chord-attack-72",
+    "raw_sha256": "7d19e79a0f61ec609f9ddc00504a4eab1e67b9e7abf74bed0b003406995d52eb",
+    "png": "11d-chord-attack-72.png",
     "pixels": "240x240",
     "origin": "firmware/b1_ui.c"
   },

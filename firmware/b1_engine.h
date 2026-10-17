@@ -33,6 +33,15 @@ struct b1_engine {
      only once per audio frame even when many keys use the same wheel. This
      is fixed-size storage, never heap allocation in the realtime callback. */
   int32_t wheel_value[B1_TONEWHEELS];
+  /* Dense chord fast mixer. Runtime scratch in .pool, no ISR heap/stack.
+   * Aggregate the coefficients of shared tonewheels once per PCM chunk
+   * when every key is fully open. The sound remains polyphonic. */
+  int32_t mixed_wheel_gain[B1_TONEWHEELS];
+  uint8_t mixed_wheel_leak[B1_TONEWHEELS];
+  uint8_t mixed_wheel_index[B1_TONEWHEELS];
+  uint8_t mixed_wheel_count;
+  uint8_t dense_mix_test_bypass; /* host A/B reference: do not serialize */
+
   uint32_t wheel_stamp[B1_TONEWHEELS];
   uint32_t wheel_frame, wheel_last_phase_frame;
   uint32_t wheel_phase_stamp[B1_TONEWHEELS]; /* phase update only for actually used wheels */

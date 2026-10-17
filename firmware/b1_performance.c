@@ -75,11 +75,48 @@ void b1_performance_init(struct b1_performance *p){
  for(uint8_t i=20;i<27;i++)p->chord_map[i]=(uint8_t)(i-20u);
  p->guide=0u; /* Default OFF. Existing saved projects keep their setting. */
 }
+/* V2.7: user-facing CHORD ON/OFF. Legacy project mode 0 derives state
+ * from its range layout; saved OFF explicitly suppresses chord selectors.
+ * No CHORD range exists in a factory project until CHORD is enabled. */
+static int effective_chord_range(const struct b1_performance *p){
+ if(p->chord_mode==1u)return -1;
+ for(int i=(int)B1_RANGES-1;i>=0;i--)
+  if(p->range[i].type==B1_CHORD)return i;
+ return -1;
+}
+uint8_t b1_chord_enabled(const struct b1_performance *p){return p&&effective_chord_range(p)>=0;}
+uint8_t b1_set_chord_enabled(struct b1_performance *p,struct b1_engine *e,uint8_t on){
+ if(!p||!e)return 0u;
+ if(!on){b1_release_all(p,e);p->chord_mode=1u;return 1u;}
+ if(effective_chord_range(p)>=0){p->chord_mode=2u;return 1u;}
+ /* The previous explicit OFF may conceal an already-configured range. */
+ for(int i=(int)B1_RANGES-1;i>=0;i--)if(p->range[i].type==B1_CHORD){
+  b1_release_all(p,e);p->chord_mode=2u;return 1u;
+ }
+ /* Reuse an existing DISABLED slot only; NEVER overwrite ORGAN ranges. */
+ int free_slot=-1;
+ if(p->range[2].type==B1_DISABLED)free_slot=2;
+ else for(int i=(int)B1_RANGES-1;i>=0;i--)if(p->range[i].type==B1_DISABLED){free_slot=i;break;}
+ if(free_slot<0)return 0u;
+ b1_release_all(p,e);
+ struct b1_range *r=&p->range[free_slot];
+ if(r->lo>=B1_KEYS||r->hi>=B1_KEYS||r->lo==r->hi){r->lo=20u;r->hi=26u;}
+ r->type=B1_CHORD;r->attack=0u;p->chord_mode=2u;
+ return 1u;
+}
+uint8_t b1_chord_attack(const struct b1_performance *p){
+ int i=p?effective_chord_range(p):-1;return i>=0?p->range[i].attack:0u;
+}
+uint8_t b1_set_chord_attack(struct b1_performance *p,uint8_t value){
+ int i=p?effective_chord_range(p):-1;
+ if(i<0||value>100u)return 0u;
+ p->range[i].attack=value;return 1u;
+}
 static const struct b1_range *range_for(const struct b1_performance *p,uint8_t key){
  /* Higher-numbered ranges override the base ORGAN range when they overlap.
   * This makes the factory all-keys ORGAN layout compatible with enabling a
   * CHORD modifier range later, without needing to shorten range 1 first. */
- for(int i=(int)B1_RANGES-1;i>=0;i--)if(p->range[i].type<=B1_CHORD && key>=p->range[i].lo && key<=p->range[i].hi)return &p->range[i];
+ for(int i=(int)B1_RANGES-1;i>=0;i--)if(p->range[i].type<=B1_CHORD && (p->range[i].type!=B1_CHORD||p->chord_mode!=1u) && key>=p->range[i].lo && key<=p->range[i].hi)return &p->range[i];
  return 0;
 }
 static uint8_t midi_key(uint8_t key,int8_t octave){int32_t n=(int32_t)B1_KEYBOARD_LOW_MIDI+(int32_t)key+(int32_t)octave*12;return (uint8_t)(n<0?0:n>127?127:n);}
@@ -129,10 +166,10 @@ static uint32_t b1_random(struct b1_performance *p){
  p->random_state=x?x:0x91C73E5Du;return p->random_state;
 }
 uint8_t b1_assign_chord_key(struct b1_performance *p,uint8_t physical_key,uint8_t quality){
- if(!p||physical_key>=B1_KEYS||quality>=B1_CHORD_TYPES)return 0u;
+ if(!p||physical_key>=B1_KEYS||quality>=B1_CHORD_TYPES||!b1_chord_enabled(p))return 0u;
  for(uint8_t i=0u;i<B1_RANGES;i++){
   const struct b1_range *r=&p->range[i];
-  if(r->type==B1_CHORD && physical_key>=r->lo && physical_key<=r->hi){
+  if(r==range_for(p,physical_key) && r->type==B1_CHORD && physical_key>=r->lo && physical_key<=r->hi){
    p->chord_map[physical_key]=quality;return 1u;
   }
  }
@@ -154,9 +191,9 @@ void b1_release_all(struct b1_performance *p,struct b1_engine *e){
  for(uint8_t k=0;k<B1_KEYS;k++){
   struct b1_held *h=&p->held[k];
   b1_note_off_tagged(e,(uint32_t)k+1u);
-  h->count=0;for(uint8_t i=0;i<B1_MAX_CHORD_NOTES;i++)h->pending[i]=0u;p->touch[k]=0;
+  h->count=0;for(uint8_t i=0;i<B1_MAX_CHORD_NOTES;i++)h->pending[i]=0u;p->touch[k]=0; p->pending_mask&=~(1u<<k);
  }
- p->pressed=0;p->order=0;
+ p->pressed=0;p->order=0;p->pending_mask=0u;
 }
 void b1_performance_keys(struct b1_performance *p,struct b1_engine *e,uint32_t keys){
  keys&=0x07ffffffu;
@@ -164,7 +201,7 @@ void b1_performance_keys(struct b1_performance *p,struct b1_engine *e,uint32_t k
  for(uint8_t k=0;k<B1_KEYS;k++)if(released&(1u<<k)){
   struct b1_held *h=&p->held[k];
   b1_note_off_tagged(e,(uint32_t)k+1u);
-  h->count=0;for(uint8_t i=0;i<B1_MAX_CHORD_NOTES;i++)h->pending[i]=0u;p->touch[k]=0;
+  h->count=0;for(uint8_t i=0;i<B1_MAX_CHORD_NOTES;i++)h->pending[i]=0u;p->touch[k]=0; p->pending_mask&=~(1u<<k);
  }
  p->pressed=keys;
  for(uint8_t k=0;k<B1_KEYS;k++)if(added&(1u<<k)){
@@ -205,6 +242,7 @@ void b1_performance_keys(struct b1_performance *p,struct b1_engine *e,uint32_t k
    for(uint8_t i=0;i<h->count;i++){
     uint32_t offset=offsets[i]-earliest;
     h->due[i]=p->clock+offset;h->pending[i]=offset?1u:0u;
+    if(offset)p->pending_mask|=(1u<<k);
     if(!offset)b1_note_on_tagged(e,h->note[i],h->bank[i],115u,(uint32_t)k+1u);
    }
   }else{
@@ -216,19 +254,29 @@ void b1_performance_keys(struct b1_performance *p,struct b1_engine *e,uint32_t k
 /* Deliver scheduled notes at exact sample boundaries, including within an
  * FM1 128-frame DMA block. Key-up cancels future notes before rendering. */
 void b1_performance_render(struct b1_performance *p,struct b1_engine *e,int16_t *out,uint32_t frames){
+ /* Nearly all live blocks contain NO pending humanized chord attacks.
+  * Skip 27-key scheduling scans completely and render the *same* PCM.
+  * New notes/release still enter through b1_performance_keys(), and notes
+  * pending inside the block take the sample-accurate path below. */
+ if(!p->pending_mask){b1_render_stereo(e,out,frames);p->clock+=frames;return;}
  uint32_t done=0;
  while(done<frames){
   uint32_t next=frames-done;
-  for(uint8_t k=0;k<B1_KEYS;k++){
+  uint32_t remaining=0u;
+  for(uint8_t k=0;k<B1_KEYS;k++)if(p->pending_mask&(1u<<k)){
    struct b1_held *h=&p->held[k];
    for(uint8_t i=0;i<h->count;i++)if(h->pending[i]){
     int32_t until=(int32_t)(h->due[i]-p->clock);
     if(until<=0){
      b1_note_on_tagged(e,h->note[i],h->bank[i],115u,(uint32_t)k+1u);
-     h->pending[i]=0;
-    }else if((uint32_t)until<next)next=(uint32_t)until;
+     h->pending[i]=0u;
+    }else{
+     if((uint32_t)until<next)next=(uint32_t)until;
+     remaining|=(1u<<k);
+    }
    }
   }
+  p->pending_mask=remaining;
   /* At least one rendered sample, so this bounded loop always advances. */
   if(!next)next=1u;
   b1_render_stereo(e,out+2u*done,next);
@@ -254,7 +302,7 @@ int b1_project_valid(const struct b1_project *o){
     (o->rotor_drum_pct && (o->rotor_drum_pct<50u || o->rotor_drum_pct>150u)))return 0;
  if(o->delay_mix>100u||o->delay_time>100u||o->delay_feedback>90u||o->delay_spread>100u||
    o->reverb_type>4u||o->reverb_mix>100u||o->reverb_decay>100u||o->reverb_damp>100u||
-   o->global_octave>8u||o->selected_bank>=B1_BANKS)return 0;
+   o->global_octave>8u||o->selected_bank>=B1_BANKS||o->chord_mode>2u)return 0;
  return 1;
 }
 void b1_project_capture(struct b1_project *o,const struct b1_performance *p,const struct b1_engine *e){
@@ -271,6 +319,7 @@ void b1_project_capture(struct b1_project *o,const struct b1_performance *p,cons
  o->delay_mix=e->delay_mix;o->delay_time=e->delay_time;o->delay_feedback=e->delay_feedback;o->delay_spread=e->delay_spread;
  o->reverb_type=e->reverb_type;o->reverb_mix=e->reverb_mix;o->reverb_decay=e->reverb_decay;o->reverb_damp=e->reverb_damp;
  o->global_octave=p->global_octave;o->selected_bank=p->selected_bank;
+ o->chord_mode=(p->chord_mode==1u?1u:2u);
  o->checksum=project_hash(o);
 }
 int b1_project_apply(const struct b1_project *o,struct b1_performance *p,struct b1_engine *e){
@@ -288,6 +337,7 @@ int b1_project_apply(const struct b1_project *o,struct b1_performance *p,struct 
  e->delay_mix=o->delay_mix;e->delay_time=o->delay_time;e->delay_feedback=o->delay_feedback;e->delay_spread=o->delay_spread;
  e->reverb_type=o->reverb_type;e->reverb_mix=o->reverb_mix;e->reverb_decay=o->reverb_decay;e->reverb_damp=o->reverb_damp;
  p->global_octave=o->global_octave;p->selected_bank=o->selected_bank;
+ p->chord_mode=o->chord_mode; /* 0 means legacy auto-detect; old CRC stays valid. */
  e->amp_hp=0;e->amp_tone_lp=0;e->cab_bass=0;e->cab_treble=0;
  return 1;
 }

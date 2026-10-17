@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * SikkenWorks B1 V2.5: clean signal path and adaptive, linked-stereo output protection.
+ * SikkenWorks B1 V2.6: bounded realtime DSP, clean headroom, default percussion.
  * This is original DSP informed by published Hammond service explanations.
  * NOT a sampled Hammond, not a perfect circuit-level model; verify by listening.
  * All work in audio callback is bounded, fixed-point, allocation-free.
@@ -7,6 +7,7 @@
 #include "b1_engine.h"
 #include "b1_tables.h"
 #include "b1_softclip_lut.h"
+#include "b1_guard_tables.h"
 
 /* Semi-tone intervals at nine historic Hammond B3 drawbar footages.
  * 16', 5 1/3', 8', 4', 2 2/3', 2', 1 3/5', 1 1/3', 1'. */
@@ -82,8 +83,10 @@ static int32_t scanner_process(struct b1_engine *e,int32_t dry){
   e->cv_line[(at-1u)&(B1_CV_SAMPLES-1u)]*(int32_t)frac)>>8;
  e->cv_line[e->cv_write]=clamp16(dry);
  e->cv_write=(e->cv_write+1u)&(B1_CV_SAMPLES-1u);
- return (int32_t)(((int64_t)dry*(32767u-e->cv_wet_q15)+
-   (int64_t)wet*e->cv_wet_q15)/32767u);
+ /* Interpolate Q15 using a shift, not two 64-bit products and a
+  * 64-bit divide PER AUDIO SAMPLE. The +1 LSB denominator difference
+  * is well below 16-bit resolution. */
+ return dry+(int32_t)(((int64_t)(wet-dry)*e->cv_wet_q15)>>15);
 }
 /* 4 musical spaces built from bounded integer combs and an all-pass diffusion
  * stage. 0=OFF 1=SPRING 2=ROOM 3=HALL 4=CATHEDRAL. No heap/locks. */
@@ -96,7 +99,7 @@ static void space_process(struct b1_engine *e,int32_t *left,int32_t *right){
   uint32_t tap=1400u+(uint32_t)e->delay_time*140u; /* ~32 to ~350ms */
   uint32_t j=(i-tap)&(B1_DELAY_SAMPLES-1u);
   wet_d=e->delay_line[j];
-  int32_t feedback=(int32_t)(((int64_t)wet_d*e->delay_feedback)/130);
+  int32_t feedback=(wet_d*(int32_t)e->delay_feedback)/130;
   e->delay_line[i]=clamp16(mono/2+feedback);
   int32_t spread=(int32_t)e->delay_spread;
   int32_t l=wet_d*(100-spread/3)/100;
@@ -158,13 +161,16 @@ static int32_t b1_input_guard(struct b1_engine *e,int32_t in){
  else if(peak){uint32_t decay=(peak>>10)+1u;peak=peak>decay?peak-decay:0u;}
  e->input_guard_peak=peak;
  uint32_t target=32767u;
- if(peak>15000u)target=(uint32_t)((15000u*32767u)/peak);
+ if(peak>15000u){
+  uint32_t bucket=(peak+255u)>>8;
+  target=bucket<1024u?b1_guard_input_q15[bucket]:(uint32_t)(15000u*32767u)/peak;
+ }
  if(target<e->input_guard_gain_q15)e->input_guard_gain_q15=(uint16_t)target;
  else if(e->input_guard_gain_q15<target){
   uint32_t next=(uint32_t)e->input_guard_gain_q15+8u;
   e->input_guard_gain_q15=(uint16_t)(next>target?target:next);
  }
- return (int32_t)(((int64_t)in*e->input_guard_gain_q15)/32767);
+ return (int32_t)(((int64_t)in*e->input_guard_gain_q15)>>15);
 }
 /* Linked stereo last-resort protection.  Does not soft-clip every normal
  * sample, unlike the previous always-on double-saturation stage.  Fast
@@ -175,7 +181,10 @@ static void b1_output_guard(struct b1_engine *e,int32_t *l,int32_t *r){
  uint32_t b=(uint32_t)(*r<0?-(int64_t)*r:*r);
  uint32_t peak=a>b?a:b;
  uint32_t target=32767u;
- if(peak>27000u)target=(uint32_t)((27000u*32767u)/peak);
+ if(peak>27000u){
+  uint32_t bucket=(peak+255u)>>8;
+  target=bucket<1024u?b1_guard_output_q15[bucket]:(uint32_t)(27000u*32767u)/peak;
+ }
  if(target<e->output_guard_gain_q15)e->output_guard_gain_q15=(uint16_t)target;
  else if(e->output_guard_gain_q15<target){
   uint32_t next=(uint32_t)e->output_guard_gain_q15+12u;
@@ -184,8 +193,11 @@ static void b1_output_guard(struct b1_engine *e,int32_t *l,int32_t *r){
  /* -2.5 dB fixed digital headroom after the linked peak gain.  The old
   * chain peaked safely only because it was continuously soft-clipping; the
   * cleaner route must not suddenly hit the headphone DAC harder. */
- *l=(int32_t)(((int64_t)*l*e->output_guard_gain_q15*3)/(32767*4));
- *r=(int32_t)(((int64_t)*r*e->output_guard_gain_q15*3)/(32767*4));
+ /* Compute the linked gain once. Keep 2.5dB of headroom without a
+  * pair of 64-bit integer divides in every 44.1kHz audio frame. */
+ uint32_t output_gain_q15=((uint32_t)e->output_guard_gain_q15*3u)>>2;
+ *l=(int32_t)(((int64_t)*l*output_gain_q15)>>15);
+ *r=(int32_t)(((int64_t)*r*output_gain_q15)>>15);
 }
 static uint32_t ramp(uint32_t val,uint32_t target,uint32_t tau){
  if(val==target)return val;
@@ -228,7 +240,7 @@ void b1_reset(struct b1_engine *e){
  e->registration_gain_q15=32767u;
  e->input_guard_gain_q15=32767u;e->output_guard_gain_q15=32767u;
  e->rotor_inc=612000u;e->drum_inc=573000u;
- e->percussion_enabled=0u;e->percussion_harmonic=3u;
+ e->percussion_enabled=1u;e->percussion_harmonic=3u;
  /* Musical, conservative startup registration; the player can select the
   * original aggressive ROCK/LORD settings from the existing FX page. */
  e->drive=22u;e->click=0u;e->leakage=5u;
@@ -378,6 +390,54 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
   * polyphony uses the original fast 91-additions loop, avoiding a costly
   * per-wheel multiply/branch on every active sample. */
 
+ /* Dense chord mixer: 12 fully keyed voices share at most 91 unique
+  * tonewheels. On held notes the envelopes and contact gates have settled,
+  * so calculating 12 x 9 individual harmonic sums PER SAMPLE is wasteful.
+  * Aggregate their identical wheel gains once per 128-frame DMA chunk,
+  * then render each used wheel at most once per sample. During attacks,
+  * drawbar movement and release use the exact original per-note path.
+  * This keeps normal polyphonic playing and every modulation feature. */
+ uint8_t fast_mix=(uint8_t)(!e->dense_mix_test_bypass),steady_voices=0u;
+ for(uint32_t b=0;b<B1_BANKS && fast_mix;b++)for(uint32_t h=0;h<B1_HARMONICS;h++){
+  if(e->pull_smooth_q16[b][h] != ((uint32_t)pull_q8[e->drawbars[b][h]]<<8)){
+   fast_mix=0u;break;
+  }
+ }
+ if(fast_mix){
+  for(uint32_t j=0;j<B1_VOICES;j++)if(e->voice[j].active){
+   const struct b1_voice *v=&e->voice[j];
+   /* No interpolation error during attack / release / key click. */
+   /* With KEY CLICK=0, all contacts have settled after 12 samples,
+    * so the sustained fast path can start ~0.7ms after a new chord.
+    * With click enabled retain the full 130-sample transient window. */
+   uint16_t contact_settled=(uint16_t)(e->click?130u:13u);
+   if(v->releasing || v->envelope!=32767u || v->age<contact_settled){fast_mix=0u;break;}
+   ++steady_voices;
+  }
+  if(steady_voices<3u)fast_mix=0u;
+ }
+ if(fast_mix){
+  for(uint32_t w=0;w<B1_TONEWHEELS;w++){
+   e->mixed_wheel_gain[w]=0;
+   e->mixed_wheel_leak[w]=0u;
+  }
+  for(uint32_t j=0;j<B1_VOICES;j++)if(e->voice[j].active){
+   const struct b1_voice *v=&e->voice[j];
+   for(uint32_t h=0;h<B1_HARMONICS;h++){
+    if(v->bank==0u && h==8u && e->percussion_enabled)continue;
+    e->mixed_wheel_gain[v->wheel[h]]+=(int32_t)pull_q8[e->drawbars[v->bank][h]];
+   }
+   if(e->leakage){
+    uint8_t w=(uint8_t)((v->wheel[2]+12u)%B1_TONEWHEELS);
+    ++e->mixed_wheel_leak[w];
+   }
+  }
+  e->mixed_wheel_count=0u;
+  for(uint32_t w=0;w<B1_TONEWHEELS;w++){
+   if(e->mixed_wheel_gain[w] || e->mixed_wheel_leak[w])
+    e->mixed_wheel_index[e->mixed_wheel_count++]=(uint8_t)w;
+  }
+ }
  /* Registration-aware headroom, BEFORE any clip/amp stages. All drawbar
   * footages plus the full 12-note chord are counted once per DMA block.
   * Prevent the hard square/flat-top that V2.1 produced when summing many
@@ -411,13 +471,27 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    for(uint32_t i=0;i<B1_TONEWHEELS;i++)e->wheel_stamp[i]=0u;
   }
   /* Crossfade live drawbar movements to avoid clicks while holding notes. */
-  if((t&7u)==0u)for(uint32_t b=0;b<B1_BANKS;b++)for(uint32_t h=0;h<9u;h++){
+  if(!fast_mix && (t&15u)==0u)for(uint32_t b=0;b<B1_BANKS;b++)for(uint32_t h=0;h<9u;h++){
    uint32_t dest=(uint32_t)pull_q8[e->drawbars[b][h]]<<8;
-   e->pull_smooth_q16[b][h]=ramp(e->pull_smooth_q16[b][h],dest,9u);
+   e->pull_smooth_q16[b][h]=ramp(e->pull_smooth_q16[b][h],dest,5u);
   }
   int32_t mix=0;
   uint8_t sounding_now=0u;
-  for(uint32_t j=0;j<B1_VOICES;j++){
+  if(fast_mix){
+   /* Phase progression remains continuous, only harmonic additions are
+    * grouped. Sum fits signed 32-bit: <=12*9*256*32767 ~=906M. */
+   int32_t weighted_sum=0,leak_sum=0;
+   for(uint32_t j=0;j<e->mixed_wheel_count;j++){
+    uint8_t w=e->mixed_wheel_index[j];
+    int32_t tone=shared_wheel_sample(e,w);
+    weighted_sum+=tone*e->mixed_wheel_gain[w];
+    leak_sum+=tone*(int32_t)e->mixed_wheel_leak[w];
+   }
+   mix=weighted_sum/4096;
+   if(e->leakage)mix+=leak_sum*(int32_t)e->leakage/2700;
+   sounding_now=1u;
+   /* Age changes only for voice stealing once per chunk, not per sample. */
+  }else for(uint32_t j=0;j<B1_VOICES;j++){
    struct b1_voice *v=&e->voice[j];if(!v->active)continue;
    if(v->releasing){if(v->envelope>256u)v->envelope-=256u;else{v->active=0u;continue;}}
    else if(v->envelope<32767u){uint32_t next=(uint32_t)v->envelope+1024u;v->envelope=(uint16_t)(next>32767u?32767u:next);}
@@ -463,7 +537,7 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    if(v->age<65535u)++v->age;
    /* The original Hammond key is not velocity-sensitive. Velocity is accepted
     * on MIDI but deliberately does not alter drawbar amplitude. */
-   mix+=(sum*(int32_t)v->envelope)/32767;
+   mix+=(int32_t)(((int64_t)sum*v->envelope)>>15);
   }
   /* The shared, mono-decay percussion circuit does not retrigger while keys
    * on the upper manual remain held. 2nd=4', 3rd=2 2/3'. */
@@ -471,7 +545,7 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    int32_t wave=shared_wheel_sample(e,e->percussion_wheel);
    mix+=(int32_t)(((int64_t)wave*e->percussion_env)/260000u);
    /* exponential decay ~0.22s characteristic time */
-   uint32_t drop=(e->percussion_env+9000u)/10000u;
+   uint32_t drop=(e->percussion_env+9999u)/10000u; /* always reaches zero */
    e->percussion_env=e->percussion_env>drop?e->percussion_env-drop:0u;
   }
   /* True electronic Hammond keying: a free-running wheel is NEVER
@@ -526,7 +600,7 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    uint32_t gain=(uint32_t)e->registration_gain_q15+256u;
    e->registration_gain_q15=(uint16_t)(gain>target_gain?target_gain:gain);
   }
-  mix=(int32_t)(((int64_t)mix*e->registration_gain_q15)/32767);
+  mix=(int32_t)(((int64_t)mix*e->registration_gain_q15)>>15);
   int32_t pre=b1_input_guard(e,mix-e->cabinet_hp);
   /* Emergency audio-preservation path. Real FM1 deadline overruns switch to
    * a bounded single-stage DSP route rather than permanently muting outputs.
@@ -597,8 +671,8 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    }
    space_process(e,&l,&rr);
    b1_output_guard(e,&l,&rr);
-   out[t*2u]=clamp16((int32_t)(((int64_t)l*e->output_gate_q15)/32767));
-   out[t*2u+1u]=clamp16((int32_t)(((int64_t)rr*e->output_gate_q15)/32767));
+   out[t*2u]=clamp16((int32_t)(((int64_t)l*e->output_gate_q15)>>15));
+   out[t*2u+1u]=clamp16((int32_t)(((int64_t)rr*e->output_gate_q15)>>15));
    continue;
   }
   pre=b1_amp_path(e,pre);
@@ -648,7 +722,11 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
   /* Clean linked-stereo limiter replaces always-on output saturation. */
   b1_output_guard(e,&left,&right);
   int32_t final_l=left,final_r=right;
-  out[t*2u]=clamp16((int32_t)(((int64_t)final_l*e->output_gate_q15)/32767));
-  out[t*2u+1u]=clamp16((int32_t)(((int64_t)final_r*e->output_gate_q15)/32767));
+  out[t*2u]=clamp16((int32_t)(((int64_t)final_l*e->output_gate_q15)>>15));
+  out[t*2u+1u]=clamp16((int32_t)(((int64_t)final_r*e->output_gate_q15)>>15));
+ }
+ if(fast_mix)for(uint32_t j=0;j<B1_VOICES;j++)if(e->voice[j].active){
+  uint32_t age=(uint32_t)e->voice[j].age+frames;
+  e->voice[j].age=(uint16_t)(age>65535u?65535u:age);
  }
 }

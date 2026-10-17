@@ -45,7 +45,7 @@ for file in sorted(OUT.glob('*.rgb565')):
 w=4;rows=(len(previews)+w-1)//w
 sheet=Image.new('RGB',(w*240,rows*240),(4,4,4))
 for i,img in enumerate(previews):sheet.paste(img,((i%w)*240,(i//w)*240))
-sheet.save(OUT/'B1-V2.5-UI-CONTACT-SHEET.png',optimize=True)
+sheet.save(OUT/'B1-V2.7-UI-CONTACT-SHEET.png',optimize=True)
 (OUT/'CAPTURE-MANIFEST.json').write_text(json.dumps(record,indent=2)+'\n')
 # A true animation, every frame individually rendered by the firmware C.
 from tempfile import TemporaryDirectory
@@ -62,6 +62,6 @@ with TemporaryDirectory() as d:
             v=(raw[2*i]<<8)|raw[2*i+1]
             pixels[3*i:3*i+3]=bytes((((v>>11)&31)*255//31,((v>>5)&63)*255//63,(v&31)*255//31))
         gif_frames.append(Image.frombytes('RGB',(240,240),bytes(pixels)))
-    gif_frames[0].save(OUT/'B1-V2.5-STARTUP-ANIMATION.gif',save_all=True,
+    gif_frames[0].save(OUT/'B1-V2.7-STARTUP-ANIMATION.gif',save_all=True,
                        append_images=gif_frames[1:],duration=[55]*(len(gif_frames)-1)+[130],loop=0,optimize=False)
 print(f'Captured {len(previews)} exact native frames + code-rendered GIF')

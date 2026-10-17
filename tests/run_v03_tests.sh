@@ -66,3 +66,11 @@ build/b1-v23-max-fx
 # V2.5: full drawbar overload defense, both DSP routes and maximum FX.
 $CC -std=c11 -O2 -Wall -Wextra -Werror -pedantic -I firmware firmware/b1_engine.c tests/native_v25_headroom.c -o build/b1-v25-headroom
 build/b1-v25-headroom
+
+# V2.6: sustained-wheel aggregation vs sample-by-sample reference, percussion ON,
+# all audio modes/FX, clean tails and bounded output.
+$CC -std=c11 -O2 -Wall -Wextra -Werror -pedantic -I firmware firmware/b1_engine.c tests/native_v26_audio_professional.c -o build/b1-v26-audio-professional
+build/b1-v26-audio-professional
+
+$CC -std=c11 -O2 -Wall -Wextra -Werror -pedantic -I firmware firmware/b1_engine.c firmware/b1_performance.c tests/native_v27_chord_workflow.c -o build/b1-v27-workflow
+build/b1-v27-workflow

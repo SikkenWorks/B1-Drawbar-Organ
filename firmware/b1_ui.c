@@ -301,12 +301,15 @@ void b1_ui_render(uint16_t *frame,const struct b1_ui_state *s){
   foot("TWO-BANK FLASH JOURNAL",0);
  }else if(s->page==6u){
   top("CHORD ASSIGN",0);
-  field_num("ASSIGNED KEY",s->chord_cursor+1,85,WHITE);
-  text("K2  CHORD TYPE",14,129,0,MUTED);
-  text(qualities[s->chord_quality%B1_CHORD_TYPES],15,151,1,AMBER);
-  if(s->project_error==-14)text("KEY OUTSIDE CHORD RANGE",14,187,0,PINK);
-  else text("PRESS A CHORD-RANGE KEY",14,187,0,AMBER);
-  foot("K1: BROWSE  KEY: ASSIGN",0);
+  field_num("K1  KEY",s->chord_cursor+1,79,WHITE);
+  field("K2  CHORD",qualities[s->chord_quality%B1_CHORD_TYPES],112,AMBER);
+  field("K3  ASSIGN",b1_chord_enabled(s->keys)?"ON":"OFF",145,AMBER);
+  field_num("K4  ATTACK",b1_chord_attack(s->keys),178,WHITE);
+  if(s->project_error==-14)text("OUTSIDE CHORD RANGE",14,208,0,PINK);
+  else if(s->project_error==-15)text("NO FREE RANGE SLOT",14,208,0,PINK);
+  else if(b1_chord_enabled(s->keys))text("PRESS KEY TO ASSIGN",14,208,0,AMBER);
+  else text("K3: TURN ON TO ASSIGN",14,208,0,MUTED);
+  foot("KEY ASSIGN / HUMAN ATTACK",0);
  }else if(s->page==5u){
   if(s->audio_diag){
    top("AUDIO DIAG",0);

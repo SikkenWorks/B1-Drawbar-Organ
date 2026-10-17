@@ -1,11 +1,58 @@
-<p align="center">
-  <img src="B1.png" alt="B1" width="400">
-</p>
-# SikkenWorks B1 V2.4 — Rotor Defaults
+# SikkenWorks B1 V2.6 — Realtime Polyphony & Audio Stability
 
-Custom M-VAVE FM1 rock-organ firmware. Full GPL-3.0-only source included.
+Native firmware for M-VAVE FM1. Complete source included under GPL-3.0-only.
 
-## V2.4: Factory defaults (only new/reset projects)
+## V2.6 native realtime improvements
+
+- **Dense polyphony fast mixer:** when three or more sustained voices are stable, combine the harmonic coefficients of shared tonewheels once per PCM chunk. Render a wheel once per sample regardless of how many held notes use it. All 12 voices, every drawbar and MIDI/range routing remain present. At note-on, note-off, changing drawbars or key-click onset, the original sample-by-sample per-voice path is automatically used.
+- **No idle chord scheduling scans:** pending CHORD ATTACK sample-timing is kept, but B1 no longer scans all 27 key queues for every audio block if no chord note is waiting. A note press/release only updates performance routing when the actual physical key bitset has changed.
+- **Realtime gain path:** avoid two 64-bit variable divides every sample in the stereo output guard; fixed-point Q15 shifts instead. Conservative reciprocal lookups replace runtime variable divisions in the input/output peak controls. The limiter and headroom protection stay active.
+- **Drawbar smoothing:** calculate the same gradual motion at a more economical control rate (16 samples). Actual values still glide rather than abruptly jumping.
+- **Percussion default ON**, 3rd harmonic on new/reset projects; saved projects keep their own percussion setting, as well as all other parameters.
+- **No features removed:** three manual registrations, key click, leakage, percussion, Leslie slow/fast/fine speed, scanner C/V, ROCK/B3 amps, delay, four reverbs, chords and humanized attack, 48 scales, 12 named persistent projects, OTA/stock/BEETLE menu, startup branding and the FM1 UI remain.
+
+### Tests and limits
+
+- Real pi32v2 firmware build, two identical repeated builds of **the final source**; OTA .fwsc CRC and byte-for-byte BEETLE protected header audit; embedded WebInstaller hash matches the .fwsc exactly.
+- Complete historical native tests, 16 heavy chord cases, 8 long-window reference-vs-fast mixer cases (B3/ROCK, full/SAFE DSP, FX on/off). Mean audio output deviation remains below 0.5% in tested sustained twelve-note chords (integer rounding, not bit-identical).
+- AddressSanitizer and UndefinedBehaviorSanitizer host stress tests passed; note-off ultimately produces zero PCM output; all 62 code-derived 240 x 240 screenshots regenerated and checked.
+- On the **same desktop host** the existing native_audio_perf.c benchmark with 12 held notes and scanner/rotor shows ~39–41% less per-sample compute time than V2.5 (seven-run median on the same host). This is *not* a 60MHz/FM1 timing measurement and does not guarantee no hardware underruns.
+- The current physical FM1 has not yet been measured running V2.6. Do not claim a guaranteed cure for clicking, distortion or a safe rollback. Preserve an independent working recovery path and the original BEETLE package.
+
+## Inherited V2.5 clean signal path
+
+- A polyphonic peak follower now applies protective gain **before** any
+  amplifier/scanner/cabinet stage.  This avoids feeding excessive full-drawbar
+  chord sums into non-linear stages. Attack is immediate; gain recovers slowly.
+- The B3/LESLIE SAFE-DSP route no longer performs mandatory soft clipping
+  before the scanner, nor does either route apply an always-on soft-clip to
+  the final stereo output. This preserves the actual summed tonewheel wave.
+- A linked-stereo final peak limiter keeps transients below the PCM ceiling
+  while preserving L/R image.  The output keeps an additional -2.5 dB trim
+  so the cleaner pipeline does not suddenly become hotter on the FM1.
+- ROCK/LORD retains its **user-controlled** amplifier saturation. It remains
+  deliberately distorted at high AMP GAIN / DRIVE, but dense registrations
+  are no longer forced through multiple unintended blanket saturators.
+- No new heap allocations, flash writes, UI controls, storage format changes,
+  user project migrations, or changes to OTA and recovery entry.
+- The recorded user video does not show digital full-scale clipping *after*
+  the phone microphone; upstream distortion and DMA underruns remain possible.
+
+## Validation
+
+- 16 native stress tests cover 1/12 voices, all nine drawbars fully open,
+  B3/ROCK, normal/SAFE DSP, plus effects OFF/ON. They complete with PCM peaks
+  strictly under 24,500 of 32,767 and UBSan clean.
+- Pre-existing native DSP/MIDI/chord/range/12-project regressions pass.
+- Two repeated final V2.6 pi32v2 builds and `.fwsc` packages are byte-identical.
+- 62 code-exact UI PNGs regenerated from C renderer; no graphics invented.
+- New 3-second B3 and ROCK WAVs are **software** audio references, not
+  recordings from the physical FM1.
+- CPU benchmark on desktop host with 12 voices/all effects shows similar
+  latency to V2.4. FM1 realtime timing, DAC output and recovery need a
+  physical hardware test. Do NOT claim a guaranteed audible fix yet.
+
+## V2.4 inherited factory defaults (only new/reset projects)
 
 - Factory rotor is **FAST**.
 - Factory ROTOR MIX is **60** (previously 90).
@@ -28,7 +75,7 @@ Custom M-VAVE FM1 rock-organ firmware. Full GPL-3.0-only source included.
 
 ## Firmware package
 
-- `build/SikkenWorks-B1-V2.4-BEETLE-OTA.fwsc` — real JieLi application update candidate; not yet physically verified.
+- `build/SikkenWorks-B1-V2.6-BEETLE-OTA.fwsc` — real JieLi application update candidate; not yet physically verified.
 - `B1-WebInstaller.html` — standalone web installer embedding the exact same `.fwsc`. Requires a supported browser/WebMIDI and device compatibility.
 - `build/BEETLE-RC1.01-RESTORE-ORIGINAL.fwsc` — unmodified original BEETLE reference.
 - `firmware/` — complete C firmware sources, JieLi build and Felucca HAL.

@@ -50,9 +50,11 @@ int main(int argc,char **argv){
  s.fx_page=0;s.page=0;p.selected_bank=2;emit(argv[1],"04b-drawbars-solo",&s);
  s.fx_page=0;s.page=2;emit(argv[1],"08-percussion",&s);
  s.page=3;emit(argv[1],"09-ranges-organ",&s);
- s.selected_range=2;emit(argv[1],"10-ranges-chord",&s);
+ s.selected_range=2;p.range[2].type=B1_CHORD;emit(argv[1],"10-ranges-chord",&s);
  p.range[2].attack=72;emit(argv[1],"10b-ranges-chord-humanized",&s);
- s.page=6;s.chord_cursor=21;s.chord_quality=p.chord_map[21];emit(argv[1],"11-chord-assignment",&s);
+ p.chord_mode=2u;s.page=6;s.chord_cursor=21;s.chord_quality=p.chord_map[21];emit(argv[1],"11-chord-assignment",&s);
+ p.chord_mode=1u;emit(argv[1],"11c-chord-assign-off",&s);p.chord_mode=2u;
+ p.range[2].attack=72u;emit(argv[1],"11d-chord-attack-72",&s);
  p.chord_map[21]=B1_MIN7;s.chord_quality=B1_MIN7;
  emit(argv[1],"11b-chord-assigned-min7",&s);
  s.page=5;s.project_error=0;emit(argv[1],"12-scale-keylock",&s);
