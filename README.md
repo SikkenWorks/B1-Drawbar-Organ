@@ -1,3 +1,6 @@
+<p align="center">
+  <img src="B1.png" alt="B1" width="400">
+</p>
 # SikkenWorks B1 V2.4 — Rotor Defaults
 
 Custom M-VAVE FM1 rock-organ firmware. Full GPL-3.0-only source included.
