@@ -7,13 +7,13 @@ assert(script,'FM1 WebInstaller transport script missing');
 const context={module:{exports:{}},Uint8Array,Array,Math,Number,Date,Promise,console,TextEncoder,crypto:crypto.webcrypto,atob:global.atob,setTimeout};
 vm.runInNewContext('/* SPDX-License-Identifier: GPL-3.0-only'+script[1],context,{filename:'installer.js'});
 const api=context.module.exports;
-const fw=fs.readFileSync(path.join(root,'build/SikkenWorks-B1-V2.4-BEETLE-OTA.fwsc'));
+const fw=fs.readFileSync(path.join(root,'build/SikkenWorks-B1-V2.5-BEETLE-OTA.fwsc'));
 const ref=fs.readFileSync(path.join(root,'build/BEETLE-RC1.01-RESTORE-ORIGINAL.fwsc'));
 const embedded=html.match(/<script id="firmware-embedded" type="application\/octet-stream">\s*([^<]+)\s*<\/script>/);
 assert(embedded,'Embedded .fwsc must be present');assert(Buffer.from(embedded[1].trim(),'base64').equals(fw));
 (async()=>{
- let pkg=await api.verifyPackage(new Uint8Array(fw),'etch');assert.equal(pkg.product,'FM-1_2124');
- assert.equal(api.productOf(new Uint8Array(fw)),'FM-1_2124');
+ let pkg=await api.verifyPackage(new Uint8Array(fw),'etch');assert.equal(pkg.product,'FM-1_2125');
+ assert.equal(api.productOf(new Uint8Array(fw)),'FM-1_2125');
  let back=await api.verifyPackage(new Uint8Array(ref),'freedom','beetle');assert.equal(back.product,'FM-1_2101');
  assert.equal(api.freedomSourceAllowed('FM-1_2108'),true);
  assert.equal(api.freedomSourceAllowed('FM-1_2109'),true);
@@ -22,7 +22,7 @@ assert(embedded,'Embedded .fwsc must be present');assert(Buffer.from(embedded[1]
  assert.equal(api.freedomSourceAllowed('FM-1_2112'),true);
  assert.equal(api.freedomSourceAllowed('FM-1_2114'),true);
  assert.equal(api.freedomSourceAllowed('FM-1_2117'),true);
- assert.equal(api.freedomSourceAllowed('FM-1_2119'),true);assert.equal(api.freedomSourceAllowed('FM-1_2120'),true);assert.equal(api.freedomSourceAllowed('FM-1_2122'),true);assert.equal(api.freedomSourceAllowed('FM-1_2123'),true);assert.equal(api.freedomSourceAllowed('FM-1_2124'),true);
+ assert.equal(api.freedomSourceAllowed('FM-1_2119'),true);assert.equal(api.freedomSourceAllowed('FM-1_2120'),true);assert.equal(api.freedomSourceAllowed('FM-1_2122'),true);assert.equal(api.freedomSourceAllowed('FM-1_2123'),true);assert.equal(api.freedomSourceAllowed('FM-1_2124'),true);assert.equal(api.freedomSourceAllowed('FM-1_2125'),true);
  assert.equal(api.freedomSourceAllowed('FM-1_2107'),true);
  assert.equal(api.freedomSourceAllowed('FM-1_2101'),true);
  assert.equal(api.freedomSourceAllowed('FM-1_2104'),true);
@@ -35,7 +35,7 @@ assert(embedded,'Embedded .fwsc must be present');assert(Buffer.from(embedded[1]
  assert.equal(api.isSupportedEtchIdentity('FM-1_2112'),true);
  assert.equal(api.isSupportedEtchIdentity('FM-1_2114'),true);
  assert.equal(api.isSupportedEtchIdentity('FM-1_2117'),true);
- assert.equal(api.isSupportedEtchIdentity('FM-1_2118'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2119'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2122'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2123'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2124'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2118'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2119'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2122'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2123'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2124'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2118'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2119'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2122'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2123'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2124'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2118'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2119'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2122'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2123'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2124'),true);
+ assert.equal(api.isSupportedEtchIdentity('FM-1_2118'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2119'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2122'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2123'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2124'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2125'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2118'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2119'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2122'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2123'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2124'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2125'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2118'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2119'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2122'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2123'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2124'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2125'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2118'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2119'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2122'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2123'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2124'),true);assert.equal(api.isSupportedEtchIdentity('FM-1_2125'),true);
  assert.equal(api.isSupportedEtchIdentity('FM-1_2107'),true);
  assert.equal(api.isSupportedEtchIdentity('FM-1_2101'),true);
  assert.equal(api.isSupportedEtchIdentity('FM-1_2104'),true);

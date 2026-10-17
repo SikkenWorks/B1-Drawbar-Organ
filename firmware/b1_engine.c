@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * SikkenWorks B1 V2.1: audible CPU-bounded scanner/Leslie FX and key-gated DSP.
+ * SikkenWorks B1 V2.5: clean signal path and adaptive, linked-stereo output protection.
  * This is original DSP informed by published Hammond service explanations.
  * NOT a sampled Hammond, not a perfect circuit-level model; verify by listening.
  * All work in audio callback is bounded, fixed-point, allocation-free.
@@ -144,6 +144,49 @@ static int32_t soft_ratio(int32_t x,const uint16_t *tbl,uint32_t knee){
  }
  return x<0?-(int32_t)y:(int32_t)y;
 }
+/* V2.5: Never let a polyphonic organ sum force the scanner, cabinet or
+ * amplifier into permanent clipping.  Real drawbar tonewheels are summed
+ * linearly.  A peak follower lowers gain BEFORE nonlinear stages, linked to
+ * every registration, with immediate attenuation and very slow recovery.
+ * Division happens only when a new envelope peak changes the required gain
+ * (and when recovering above the knee), not in the common clean path.
+ * This gain is a transient, never part of a saved patch. */
+static int32_t b1_input_guard(struct b1_engine *e,int32_t in){
+ uint32_t a=(uint32_t)(in<0?-(int64_t)in:in);
+ uint32_t peak=e->input_guard_peak;
+ if(a>=peak){peak=a;}
+ else if(peak){uint32_t decay=(peak>>10)+1u;peak=peak>decay?peak-decay:0u;}
+ e->input_guard_peak=peak;
+ uint32_t target=32767u;
+ if(peak>15000u)target=(uint32_t)((15000u*32767u)/peak);
+ if(target<e->input_guard_gain_q15)e->input_guard_gain_q15=(uint16_t)target;
+ else if(e->input_guard_gain_q15<target){
+  uint32_t next=(uint32_t)e->input_guard_gain_q15+8u;
+  e->input_guard_gain_q15=(uint16_t)(next>target?target:next);
+ }
+ return (int32_t)(((int64_t)in*e->input_guard_gain_q15)/32767);
+}
+/* Linked stereo last-resort protection.  Does not soft-clip every normal
+ * sample, unlike the previous always-on double-saturation stage.  Fast
+ * attack on any transient, slow, smooth recovery; common L/R gain preserves
+ * stereo position.  Even intentional ROCK drive cannot overflow the DAC. */
+static void b1_output_guard(struct b1_engine *e,int32_t *l,int32_t *r){
+ uint32_t a=(uint32_t)(*l<0?-(int64_t)*l:*l);
+ uint32_t b=(uint32_t)(*r<0?-(int64_t)*r:*r);
+ uint32_t peak=a>b?a:b;
+ uint32_t target=32767u;
+ if(peak>27000u)target=(uint32_t)((27000u*32767u)/peak);
+ if(target<e->output_guard_gain_q15)e->output_guard_gain_q15=(uint16_t)target;
+ else if(e->output_guard_gain_q15<target){
+  uint32_t next=(uint32_t)e->output_guard_gain_q15+12u;
+  e->output_guard_gain_q15=(uint16_t)(next>target?target:next);
+ }
+ /* -2.5 dB fixed digital headroom after the linked peak gain.  The old
+  * chain peaked safely only because it was continuously soft-clipping; the
+  * cleaner route must not suddenly hit the headphone DAC harder. */
+ *l=(int32_t)(((int64_t)*l*e->output_guard_gain_q15*3)/(32767*4));
+ *r=(int32_t)(((int64_t)*r*e->output_guard_gain_q15*3)/(32767*4));
+}
 static uint32_t ramp(uint32_t val,uint32_t target,uint32_t tau){
  if(val==target)return val;
  if(val<target){uint32_t d=(target-val+tau-1u)/tau;return d>target-val?target:val+d;}
@@ -183,6 +226,7 @@ void b1_reset(struct b1_engine *e){
  e->rotor_enabled=1u;e->rotor_fast=1u;e->rotor_mix=60u;e->rotor_width=75u;
  e->rotor_slow_pct=100u;e->rotor_fast_pct=100u;e->rotor_drum_pct=100u;
  e->registration_gain_q15=32767u;
+ e->input_guard_gain_q15=32767u;e->output_guard_gain_q15=32767u;
  e->rotor_inc=612000u;e->drum_inc=573000u;
  e->percussion_enabled=0u;e->percussion_harmonic=3u;
  /* Musical, conservative startup registration; the player can select the
@@ -258,6 +302,8 @@ void b1_panic(struct b1_engine *e){
  for(uint32_t i=0;i<B1_VOICES;i++)e->voice[i].active=0u;
  e->upper_held=0u;e->percussion_latched=0u;e->percussion_env=0u;
  e->output_gate_q15=0u;b1_clear_fx_tail(e);
+ e->input_guard_peak=0u;e->input_guard_gain_q15=32767u;
+ e->output_guard_gain_q15=32767u;
 }
 static int32_t fractional_read(const int16_t *buf,uint32_t write,uint32_t phase,int32_t center,int32_t delta){
  int32_t dq=center*256+((int32_t)b1_sine[phase>>21]*delta)/32768;
@@ -481,7 +527,7 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    e->registration_gain_q15=(uint16_t)(gain>target_gain?target_gain:gain);
   }
   mix=(int32_t)(((int64_t)mix*e->registration_gain_q15)/32767);
-  int32_t pre=mix-e->cabinet_hp;
+  int32_t pre=b1_input_guard(e,mix-e->cabinet_hp);
   /* Emergency audio-preservation path. Real FM1 deadline overruns switch to
    * a bounded single-stage DSP route rather than permanently muting outputs.
    * MIDI, all nine drawbars, chords, key click, and leakage remain active;
@@ -512,7 +558,8 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
     cabinet=soft_ratio(cabinet,b1_clip_20500,20500u);
     pre=(pre*(int32_t)(100u-e->cabinet_mix)+cabinet*(int32_t)e->cabinet_mix)/100;
    }
-   int32_t sample=soft_ratio(pre,b1_clip_30000,30000u);
+   /* Do not distort the entire CLEAN/B3 waveform before the effects. */
+   int32_t sample=pre;
    /* The scanner is audible independently of rotor state. The modes are
     * Vibrato V1-3: 100% moving delay; Chorus C1-3: dry/wet 50:50.
     * Delay base is 5.8ms, with a depth-controlled variable delay. */
@@ -549,7 +596,7 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
     rr=(sample*(int32_t)(100u-wet)+rotating_r*(int32_t)wet)/100;
    }
    space_process(e,&l,&rr);
-   l=soft_ratio(l,b1_clip_30000,30000u);rr=soft_ratio(rr,b1_clip_30000,30000u);
+   b1_output_guard(e,&l,&rr);
    out[t*2u]=clamp16((int32_t)(((int64_t)l*e->output_gate_q15)/32767));
    out[t*2u+1u]=clamp16((int32_t)(((int64_t)rr*e->output_gate_q15)/32767));
    continue;
@@ -598,9 +645,9 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
   }
   e->rotor_write=(e->rotor_write+1u)&(B1_ROTARY_SAMPLES-1u);
   space_process(e,&left,&right);
-  /* Conservative non-hard clipping protects the FM1 USB/headphone path. */
-  int32_t final_l=soft_ratio(left,b1_clip_30000,30000u);
-  int32_t final_r=soft_ratio(right,b1_clip_30000,30000u);
+  /* Clean linked-stereo limiter replaces always-on output saturation. */
+  b1_output_guard(e,&left,&right);
+  int32_t final_l=left,final_r=right;
   out[t*2u]=clamp16((int32_t)(((int64_t)final_l*e->output_gate_q15)/32767));
   out[t*2u+1u]=clamp16((int32_t)(((int64_t)final_r*e->output_gate_q15)/32767));
  }

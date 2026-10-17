@@ -45,6 +45,9 @@ struct b1_engine {
   /* 0 = legacy/factory 100%; 50..150 is user-adjustable percent. */
   uint8_t rotor_slow_pct,rotor_fast_pct,rotor_drum_pct;
   uint16_t registration_gain_q15;
+  /* Safety gain is transient DSP state: never serialized into projects. */
+  uint16_t input_guard_gain_q15,output_guard_gain_q15;
+  uint32_t input_guard_peak;
   uint8_t percussion_enabled,percussion_harmonic,drive,click,leakage;
   uint8_t cv_mode,cv_depth,rotor_width,rotor_mix;
   uint8_t sound_mode,amp_gain,amp_tone,cabinet_mix;

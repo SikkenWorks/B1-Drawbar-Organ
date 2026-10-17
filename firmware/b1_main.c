@@ -1,4 +1,4 @@
-/* SikkenWorks B1 V2.1. GPL-3.0-only, custom FM1 executable.
+/* SikkenWorks B1 V2.5. GPL-3.0-only, custom FM1 executable.
  * Felucca platform HAL © Leo Kuroshita / Hügelton Instruments.
  * FLASH POLICY: OTA staging plus B1-owned, dynamically selected verified-safe two-sector journal.
  * BEETLE project data at 0x97000..0xDFFFF is never modified.
@@ -32,7 +32,7 @@
 #define FELUCCA_OTA 1
 #define FELUCCA_OTA_DRYRUN 0
 #define FELUCCA_UAC 0
-#define FELUCCA_ID "FM-1_2124"
+#define FELUCCA_ID "FM-1_2125"
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
 #define HALF_FRAMES 128u
 #include "usb.c"

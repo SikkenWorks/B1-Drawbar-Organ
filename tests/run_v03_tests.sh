@@ -62,3 +62,7 @@ $CC -std=c11 -O2 -Wall -Wextra -Werror -pedantic -DB1_STORAGE_DYNAMIC=1 -I firmw
 build/b1-v23-migration
 $CC -std=c11 -O2 -Wall -Wextra -Werror -pedantic -I firmware firmware/b1_engine.c tests/native_v23_max_fx_stress.c -o build/b1-v23-max-fx
 build/b1-v23-max-fx
+
+# V2.5: full drawbar overload defense, both DSP routes and maximum FX.
+$CC -std=c11 -O2 -Wall -Wextra -Werror -pedantic -I firmware firmware/b1_engine.c tests/native_v25_headroom.c -o build/b1-v25-headroom
+build/b1-v25-headroom
