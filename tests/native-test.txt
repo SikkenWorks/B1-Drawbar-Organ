@@ -1,0 +1,1 @@
+B1 V0.8 host tests: native organ, chord attack scheduling, project V4, UI pixel exact and WebInstaller checks passed. Physical hardware untested.

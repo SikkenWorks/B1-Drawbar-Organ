@@ -1,0 +1,436 @@
+[
+  {
+    "name": "01-drawbars-upper-page1",
+    "raw_sha256": "baf920a57a6365e60dfaf921187cdaddbf99a142a88ae3b9cbc2feb1bea2f065",
+    "png": "01-drawbars-upper-page1.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "01b-octave-plus1",
+    "raw_sha256": "1becbb4a11207904087c3729982e4c807f519fa7053ed6334ad43a0aa68ee2ad",
+    "png": "01b-octave-plus1.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "02-drawbars-upper-page2",
+    "raw_sha256": "03af24b5a7b29ec77b167c36e059b5b064dbc1eb307077a3ab124c51f5ebd133",
+    "png": "02-drawbars-upper-page2.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "03-drawbars-upper-page3",
+    "raw_sha256": "4767d4725d814f73c4f4f99c93823fbd1644f6a7cd768132f61d1cac21fb9f0f",
+    "png": "03-drawbars-upper-page3.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "04-drawbars-lower",
+    "raw_sha256": "325db5118bf10e1354ce4e0c454e1c5e7ab6673392a8ac5e3ef2ba2be7c3db1f",
+    "png": "04-drawbars-lower.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "04b-drawbars-solo",
+    "raw_sha256": "830cc83ac17e0c5b6cd7110862897e64415d457a65cadc6197f6f29726eff64b",
+    "png": "04b-drawbars-solo.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "05-leslie-drive",
+    "raw_sha256": "350a96602337900bc597f163b49b031ba51feda957b21ed5f8b352c5ecefeb26",
+    "png": "05-leslie-drive.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "05b-key-click-50",
+    "raw_sha256": "f7e565596535c238c833334aa01fc70f518d162b99170c5989646381ec0b08da",
+    "png": "05b-key-click-50.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "05c-key-click-100",
+    "raw_sha256": "c8398fd6d6dbe9ccc129843327375ec53b4e5b344f5c96209eccf7d6efa0dc49",
+    "png": "05c-key-click-100.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "06-chorus-vibrato-off",
+    "raw_sha256": "8de81fced93d64df2df49045239dfc7cd672844b119598f65cfb3fcac5950690",
+    "png": "06-chorus-vibrato-off.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "07-chorus-vibrato-c2",
+    "raw_sha256": "4cfa7ee0fab3cd8e829cb8e503593f455ceb7e01c0f17f11333b9e877dfabbd1",
+    "png": "07-chorus-vibrato-c2.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "07b-rock-lord-amp",
+    "raw_sha256": "ab6bf975b93ef265b295c6e2fb5265a85f6d53ae399c96f164993af620fc5cf4",
+    "png": "07b-rock-lord-amp.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "07c-b3-leslie-amp",
+    "raw_sha256": "1c4dd45f122fcf03b0854017c13e0b9b14abb21082012533953294f39ba1ed8b",
+    "png": "07c-b3-leslie-amp.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "07d-rotor-speed-finetune",
+    "raw_sha256": "2d963436db3f8d023b9ae10f21b1c58a04fd3a64e5b7ad02b2463e85bd42f233",
+    "png": "07d-rotor-speed-finetune.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "07e-delay",
+    "raw_sha256": "be52f133556597bdf06a109a583d58ec1aaeb6a74a1eecfa9329233ca4b0dc71",
+    "png": "07e-delay.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "07f-reverb-spring",
+    "raw_sha256": "8d528aeaa853cda083d0c0fda42a759d9a8d8c7baad5c4ed9e386b985fed6d40",
+    "png": "07f-reverb-spring.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "07g-reverb-room",
+    "raw_sha256": "95012b149741bec77f7b39f7386640e2928fd017b5442090b55d75ab3eae26dd",
+    "png": "07g-reverb-room.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "07h-reverb-hall",
+    "raw_sha256": "4df5023ccbc30adffa540f88aca80b1e858ba3f3037f7b9d14f1ed55dcad38c7",
+    "png": "07h-reverb-hall.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "07i-reverb-cathedral",
+    "raw_sha256": "35be04c5cebe313a4555bf1994b5a474bc568f638e9d621650482ae2963f9182",
+    "png": "07i-reverb-cathedral.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "08-percussion",
+    "raw_sha256": "273eaa3937fc4ac5ff9cebe05ffefeb98f0abb51f73003314290c77d50b11899",
+    "png": "08-percussion.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "09-ranges-organ",
+    "raw_sha256": "3d1cf38da66c4a617cef7ba556d0aff4c3764c097fb0371cf4ea364d290afd7b",
+    "png": "09-ranges-organ.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "10-ranges-chord",
+    "raw_sha256": "a1190cd31196062d1c93b96211417d680714fa2cc3ca974f855e37942ea8c14a",
+    "png": "10-ranges-chord.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "10b-ranges-chord-humanized",
+    "raw_sha256": "a1190cd31196062d1c93b96211417d680714fa2cc3ca974f855e37942ea8c14a",
+    "png": "10b-ranges-chord-humanized.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "11-chord-assignment",
+    "raw_sha256": "2da5a220841be88d4c0d37654e36ad2e9d96ef2b0ae4dba4f5cbfe6d0c7cd877",
+    "png": "11-chord-assignment.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "11b-chord-assigned-min7",
+    "raw_sha256": "5ef2fda64390fbe132194cf057abf41e78218e32f9bb5f740025a6d21f4359ca",
+    "png": "11b-chord-assigned-min7.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "12-scale-keylock",
+    "raw_sha256": "3f427094e4dea79b5568801358a8ba79ff426185002e57ca08b8c273bb62bf0a",
+    "png": "12-scale-keylock.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "12a-scale-c-chromatic",
+    "raw_sha256": "3f427094e4dea79b5568801358a8ba79ff426185002e57ca08b8c273bb62bf0a",
+    "png": "12a-scale-c-chromatic.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "12b-scale-c-major",
+    "raw_sha256": "784bbbf96f447bf2543d38447e508a7d31850e0edd2c9b1dac37c3a685052ce6",
+    "png": "12b-scale-c-major.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "12c-scale-dsharp-minor",
+    "raw_sha256": "ebcf6d46427a059daf237ef0570b1eb2e6e613b1ddefbc44316d53176df57ad9",
+    "png": "12c-scale-dsharp-minor.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "12d-scale-fsharp-lydian",
+    "raw_sha256": "94ab10a7dd48ff8b2a4b6b43a172f3e8f44dc8691dcb1eafe5ce26dfcd8d9999",
+    "png": "12d-scale-fsharp-lydian.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "12e-scale-c-dorian-guide-off",
+    "raw_sha256": "170842eb6a0ccce3a47b2ac04d93726552713f9b46bf81fa36ac4e29633e6ef6",
+    "png": "12e-scale-c-dorian-guide-off.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "12f-scale-g-mixolydian",
+    "raw_sha256": "2e079759f861d4fc3f12f8f4418e3346ec7ec4c848331fc20d4920f75b019961",
+    "png": "12f-scale-g-mixolydian.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "12g-scale-a-locrian",
+    "raw_sha256": "daadc8d4b2828cceb81ef349d108db147653c8fcf57fd8a82d8c3dc3f4e414b0",
+    "png": "12g-scale-a-locrian.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "12h-scale-c-minor-pentatonic",
+    "raw_sha256": "0fba180ef7ee6373a57a85fd78033f9b299785502f9311b71eacbe3e842b8511",
+    "png": "12h-scale-c-minor-pentatonic.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "12i-scale-d-whole-half-dim",
+    "raw_sha256": "123811d53078e226e43083eb42fe2b2fc599c26791625aa2db0d21387ada343d",
+    "png": "12i-scale-d-whole-half-dim.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "12j-scale-fsharp-blues-oct",
+    "raw_sha256": "668c86f17aa46f8b0f1c98de34d079a8ce8f5ec8b3de42ae8d56cd5dfefeb384",
+    "png": "12j-scale-fsharp-blues-oct.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "12k-audio-diagnostic",
+    "raw_sha256": "eecab63c98081655956bdc03108b55c18cdf1ab581679ae4f1552fcad44e8298",
+    "png": "12k-audio-diagnostic.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "13-project-menu",
+    "raw_sha256": "f13596dbb1a5967fe33509f616c8bd64a27807a6ab9c954303b65d7f717a59e2",
+    "png": "13-project-menu.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "13b-project-saved-01",
+    "raw_sha256": "0f02f4f8143fb127e03b1a13834fce2aab5b71ff55552b94bbdaa946494f290b",
+    "png": "13b-project-saved-01.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "13c-project-saved-12",
+    "raw_sha256": "a1835f62c7c4391e4332804e768bd200092dcc3781b93e05e0fa831e00425167",
+    "png": "13c-project-saved-12.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "13d-project-name-editor",
+    "raw_sha256": "11e6e9fe7cc0c1495abf605311c034c2ce5b0a71bea9269c725521ce4d944a1e",
+    "png": "13d-project-name-editor.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "13e-storage-locked",
+    "raw_sha256": "51c86718c42823a8fad49a688cd4f9156fd79c57c1d306fc222b57b2840f64f3",
+    "png": "13e-storage-locked.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "13f-storage-erase-confirm-no",
+    "raw_sha256": "aad500a76fc8ab3af9cefdd8786e7bf7c92bd17bed646a9dde6a3efc810060b8",
+    "png": "13f-storage-erase-confirm-no.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "13g-storage-erase-confirm-yes",
+    "raw_sha256": "c99d0ca78897db1be7105a33d61197f4fc003a317bc45ad8eabc318944b7ea9a",
+    "png": "13g-storage-erase-confirm-yes.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "13h-project-save-feedback",
+    "raw_sha256": "5527601ac54767439661fdab2d70f528927f6d3c41f7899e0c6e7f65171aa8be",
+    "png": "13h-project-save-feedback.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "13i-project-load-feedback",
+    "raw_sha256": "fefcba525ba755549eed45a6e7a381d950f0b1bc785c6abacc8fd51706aaf1ef",
+    "png": "13i-project-load-feedback.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "14-safe-mode",
+    "raw_sha256": "3242230ddaab6463c52457bdc3f8a1306dc91b95c6931e962b345486f4032222",
+    "png": "14-safe-mode.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "15-ota-check-stage",
+    "raw_sha256": "1274b8c049b40f9fc4f545722cb0b1ee79ad0cdd9f631cb29d9112f4ecf93efa",
+    "png": "15-ota-check-stage.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "16-ota-check-error",
+    "raw_sha256": "ec9d71434eeeac7f84ee0a6b1e5d5b480ecc25e50aaa186445fa41851a07dd69",
+    "png": "16-ota-check-error.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "boot-0000",
+    "raw_sha256": "9d82353fa65b7b3b1de51ee098f74a2705fbdeb9dfaa6f7e327e2fb1d4cf5af3",
+    "png": "boot-0000.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "boot-0120",
+    "raw_sha256": "5e902be66d2d10e00f96af1502adbad62205e6309980af198224d12fd2b80e97",
+    "png": "boot-0120.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "boot-0250",
+    "raw_sha256": "ae3ec5b9bf056b1615aca979903fc59f1e1dd8ec5b020951d2048dfe582a4b5e",
+    "png": "boot-0250.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "boot-0450",
+    "raw_sha256": "1da9c06fffd087d6e9353f31a7e7e3ed5471e9362bdc07fc88ef7eee90848dd9",
+    "png": "boot-0450.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "boot-0700",
+    "raw_sha256": "c22656315e30ae47aa8a01cc4613e8846652d3c7f136c5d78c492f3929f6db71",
+    "png": "boot-0700.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "boot-1000",
+    "raw_sha256": "40037d2baa7c7caec983eb82eb28f9dd8c1a2927d0f36bc2aec4ad5c450efc6d",
+    "png": "boot-1000.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "boot-1300",
+    "raw_sha256": "4b2ac5ce7f9e7932f75c49d3ce7bac80ae3be2a094cccf3375421b5d952795c9",
+    "png": "boot-1300.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "boot-1600",
+    "raw_sha256": "4b2ac5ce7f9e7932f75c49d3ce7bac80ae3be2a094cccf3375421b5d952795c9",
+    "png": "boot-1600.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "boot-2200",
+    "raw_sha256": "4b2ac5ce7f9e7932f75c49d3ce7bac80ae3be2a094cccf3375421b5d952795c9",
+    "png": "boot-2200.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "boot-2800",
+    "raw_sha256": "4b2ac5ce7f9e7932f75c49d3ce7bac80ae3be2a094cccf3375421b5d952795c9",
+    "png": "boot-2800.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "boot-2960",
+    "raw_sha256": "1a6c36a66b5345e5c5e6e612042181c4056f2fa9e74623ad94b07aeb6417ffdf",
+    "png": "boot-2960.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "boot-3110",
+    "raw_sha256": "ed0e4ec7c8fc46a438f633f4205e60596980eb146e7974cd1ae177552206c8c9",
+    "png": "boot-3110.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "boot-3220",
+    "raw_sha256": "baf920a57a6365e60dfaf921187cdaddbf99a142a88ae3b9cbc2feb1bea2f065",
+    "png": "boot-3220.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  }
+]

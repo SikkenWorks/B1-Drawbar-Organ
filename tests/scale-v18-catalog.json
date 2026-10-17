@@ -1,0 +1,666 @@
+[
+  {
+    "index": 0,
+    "name": "CHROMATIC",
+    "intervals": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ],
+    "mask": 4095
+  },
+  {
+    "index": 1,
+    "name": "MAJOR",
+    "intervals": [
+      0,
+      2,
+      4,
+      5,
+      7,
+      9,
+      11
+    ],
+    "mask": 2741
+  },
+  {
+    "index": 2,
+    "name": "MINOR",
+    "intervals": [
+      0,
+      2,
+      3,
+      5,
+      7,
+      8,
+      10
+    ],
+    "mask": 1453
+  },
+  {
+    "index": 3,
+    "name": "LYDIAN",
+    "intervals": [
+      0,
+      2,
+      4,
+      6,
+      7,
+      9,
+      11
+    ],
+    "mask": 2773
+  },
+  {
+    "index": 4,
+    "name": "DORIAN",
+    "intervals": [
+      0,
+      2,
+      3,
+      5,
+      7,
+      9,
+      10
+    ],
+    "mask": 1709
+  },
+  {
+    "index": 5,
+    "name": "PHRYGIAN",
+    "intervals": [
+      0,
+      1,
+      3,
+      5,
+      7,
+      8,
+      10
+    ],
+    "mask": 1451
+  },
+  {
+    "index": 6,
+    "name": "MIXOLYDIAN",
+    "intervals": [
+      0,
+      2,
+      4,
+      5,
+      7,
+      9,
+      10
+    ],
+    "mask": 1717
+  },
+  {
+    "index": 7,
+    "name": "LOCRIAN",
+    "intervals": [
+      0,
+      1,
+      3,
+      5,
+      6,
+      8,
+      10
+    ],
+    "mask": 1387
+  },
+  {
+    "index": 8,
+    "name": "HARM MINOR",
+    "intervals": [
+      0,
+      2,
+      3,
+      5,
+      7,
+      8,
+      11
+    ],
+    "mask": 2477
+  },
+  {
+    "index": 9,
+    "name": "MELOD MIN",
+    "intervals": [
+      0,
+      2,
+      3,
+      5,
+      7,
+      9,
+      11
+    ],
+    "mask": 2733
+  },
+  {
+    "index": 10,
+    "name": "HARM MAJOR",
+    "intervals": [
+      0,
+      2,
+      4,
+      5,
+      7,
+      8,
+      11
+    ],
+    "mask": 2485
+  },
+  {
+    "index": 11,
+    "name": "DBL HARM",
+    "intervals": [
+      0,
+      1,
+      4,
+      5,
+      7,
+      8,
+      11
+    ],
+    "mask": 2483
+  },
+  {
+    "index": 12,
+    "name": "PHRYG DOM",
+    "intervals": [
+      0,
+      1,
+      4,
+      5,
+      7,
+      8,
+      10
+    ],
+    "mask": 1459
+  },
+  {
+    "index": 13,
+    "name": "LYD DOM",
+    "intervals": [
+      0,
+      2,
+      4,
+      6,
+      7,
+      9,
+      10
+    ],
+    "mask": 1749
+  },
+  {
+    "index": 14,
+    "name": "ALTERED",
+    "intervals": [
+      0,
+      1,
+      3,
+      4,
+      6,
+      8,
+      10
+    ],
+    "mask": 1371
+  },
+  {
+    "index": 15,
+    "name": "LOCRIAN #2",
+    "intervals": [
+      0,
+      2,
+      3,
+      5,
+      6,
+      8,
+      10
+    ],
+    "mask": 1389
+  },
+  {
+    "index": 16,
+    "name": "DORIAN B2",
+    "intervals": [
+      0,
+      1,
+      3,
+      5,
+      7,
+      9,
+      10
+    ],
+    "mask": 1707
+  },
+  {
+    "index": 17,
+    "name": "LYDIAN AUG",
+    "intervals": [
+      0,
+      2,
+      4,
+      6,
+      8,
+      9,
+      11
+    ],
+    "mask": 2901
+  },
+  {
+    "index": 18,
+    "name": "MIXO B6",
+    "intervals": [
+      0,
+      2,
+      4,
+      5,
+      7,
+      8,
+      10
+    ],
+    "mask": 1461
+  },
+  {
+    "index": 19,
+    "name": "MAJOR LOC",
+    "intervals": [
+      0,
+      2,
+      4,
+      5,
+      6,
+      8,
+      10
+    ],
+    "mask": 1397
+  },
+  {
+    "index": 20,
+    "name": "MAJ PENTA",
+    "intervals": [
+      0,
+      2,
+      4,
+      7,
+      9
+    ],
+    "mask": 661
+  },
+  {
+    "index": 21,
+    "name": "MIN PENTA",
+    "intervals": [
+      0,
+      3,
+      5,
+      7,
+      10
+    ],
+    "mask": 1193
+  },
+  {
+    "index": 22,
+    "name": "MAJ BLUES",
+    "intervals": [
+      0,
+      2,
+      3,
+      4,
+      7,
+      9
+    ],
+    "mask": 669
+  },
+  {
+    "index": 23,
+    "name": "MIN BLUES",
+    "intervals": [
+      0,
+      3,
+      5,
+      6,
+      7,
+      10
+    ],
+    "mask": 1257
+  },
+  {
+    "index": 24,
+    "name": "WHOLE TONE",
+    "intervals": [
+      0,
+      2,
+      4,
+      6,
+      8,
+      10
+    ],
+    "mask": 1365
+  },
+  {
+    "index": 25,
+    "name": "DIM H-W",
+    "intervals": [
+      0,
+      1,
+      3,
+      4,
+      6,
+      7,
+      9,
+      10
+    ],
+    "mask": 1755
+  },
+  {
+    "index": 26,
+    "name": "DIM W-H",
+    "intervals": [
+      0,
+      2,
+      3,
+      5,
+      6,
+      8,
+      9,
+      11
+    ],
+    "mask": 2925
+  },
+  {
+    "index": 27,
+    "name": "AUGMENTED",
+    "intervals": [
+      0,
+      3,
+      4,
+      7,
+      8,
+      11
+    ],
+    "mask": 2457
+  },
+  {
+    "index": 28,
+    "name": "BEBOP DOM",
+    "intervals": [
+      0,
+      2,
+      4,
+      5,
+      7,
+      9,
+      10,
+      11
+    ],
+    "mask": 3765
+  },
+  {
+    "index": 29,
+    "name": "BEBOP MAJ",
+    "intervals": [
+      0,
+      2,
+      4,
+      5,
+      7,
+      8,
+      9,
+      11
+    ],
+    "mask": 2997
+  },
+  {
+    "index": 30,
+    "name": "BEBOP DOR",
+    "intervals": [
+      0,
+      2,
+      3,
+      4,
+      5,
+      7,
+      9,
+      10
+    ],
+    "mask": 1725
+  },
+  {
+    "index": 31,
+    "name": "BEBOP MIN",
+    "intervals": [
+      0,
+      2,
+      3,
+      5,
+      7,
+      8,
+      10,
+      11
+    ],
+    "mask": 3501
+  },
+  {
+    "index": 32,
+    "name": "HUNG MIN",
+    "intervals": [
+      0,
+      2,
+      3,
+      6,
+      7,
+      8,
+      11
+    ],
+    "mask": 2509
+  },
+  {
+    "index": 33,
+    "name": "NEAP MIN",
+    "intervals": [
+      0,
+      1,
+      3,
+      5,
+      7,
+      8,
+      11
+    ],
+    "mask": 2475
+  },
+  {
+    "index": 34,
+    "name": "NEAP MAJ",
+    "intervals": [
+      0,
+      1,
+      3,
+      5,
+      7,
+      9,
+      11
+    ],
+    "mask": 2731
+  },
+  {
+    "index": 35,
+    "name": "PERSIAN",
+    "intervals": [
+      0,
+      1,
+      4,
+      5,
+      6,
+      8,
+      11
+    ],
+    "mask": 2419
+  },
+  {
+    "index": 36,
+    "name": "ROMANIAN MIN",
+    "intervals": [
+      0,
+      2,
+      3,
+      6,
+      7,
+      9,
+      10
+    ],
+    "mask": 1741
+  },
+  {
+    "index": 37,
+    "name": "ENIGMATIC",
+    "intervals": [
+      0,
+      1,
+      4,
+      6,
+      8,
+      10,
+      11
+    ],
+    "mask": 3411
+  },
+  {
+    "index": 38,
+    "name": "HIRAJOSHI",
+    "intervals": [
+      0,
+      2,
+      3,
+      7,
+      8
+    ],
+    "mask": 397
+  },
+  {
+    "index": 39,
+    "name": "IN SEN",
+    "intervals": [
+      0,
+      1,
+      5,
+      7,
+      10
+    ],
+    "mask": 1187
+  },
+  {
+    "index": 40,
+    "name": "IWATO",
+    "intervals": [
+      0,
+      1,
+      5,
+      6,
+      10
+    ],
+    "mask": 1123
+  },
+  {
+    "index": 41,
+    "name": "YO",
+    "intervals": [
+      0,
+      2,
+      5,
+      7,
+      9
+    ],
+    "mask": 677
+  },
+  {
+    "index": 42,
+    "name": "EGYPTIAN",
+    "intervals": [
+      0,
+      2,
+      5,
+      7,
+      10
+    ],
+    "mask": 1189
+  },
+  {
+    "index": 43,
+    "name": "PELOG",
+    "intervals": [
+      0,
+      1,
+      3,
+      7,
+      8
+    ],
+    "mask": 395
+  },
+  {
+    "index": 44,
+    "name": "PROMETHEUS",
+    "intervals": [
+      0,
+      2,
+      4,
+      6,
+      9,
+      10
+    ],
+    "mask": 1621
+  },
+  {
+    "index": 45,
+    "name": "BLUES OCT",
+    "intervals": [
+      0,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      10
+    ],
+    "mask": 1277
+  },
+  {
+    "index": 46,
+    "name": "SPANISH 8",
+    "intervals": [
+      0,
+      1,
+      3,
+      4,
+      5,
+      6,
+      8,
+      10
+    ],
+    "mask": 1403
+  },
+  {
+    "index": 47,
+    "name": "LYDIAN #2",
+    "intervals": [
+      0,
+      3,
+      4,
+      6,
+      7,
+      9,
+      11
+    ],
+    "mask": 2777
+  }
+]
