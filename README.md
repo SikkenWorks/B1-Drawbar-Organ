@@ -1,10 +1,9 @@
 <div align="center">
 
 <img src="B1.gif" alt="B1 drawbar organ on the M-VAVE FM-1" width="240">
-
-
+<br>
 # B1 Organ
-
+<br>
 **A drawbar organ for the M-VAVE FM-1.**
 
 Tonewheels, nine drawbars, rotary speaker, percussion and the character of a classic rock organ, built into a pocket-sized instrument.
