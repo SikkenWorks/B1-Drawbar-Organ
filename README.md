@@ -2,7 +2,8 @@
 
 <img src="B1.gif" alt="B1 drawbar organ on the M-VAVE FM-1" width="240">
 
-# B1
+
+# B1 Organ
 
 **A drawbar organ for the M-VAVE FM-1.**
 
