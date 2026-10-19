@@ -19,11 +19,13 @@
 #define B1_REVERB_DIFF 512u
 #define B1_SOUND_B3 0u
 #define B1_SOUND_ROCK 1u
+#define B1_OSC_ORGAN 0u
+#define B1_OSC_SAW 1u
 struct b1_voice {
   uint32_t seed,owner;
   uint16_t envelope,age,release_click_age;
   uint8_t wheel[B1_HARMONICS];
-  uint8_t note,bank,velocity,active,releasing;
+  uint8_t note,bank,velocity,active,releasing,leakage_wheel;
 };
 struct b1_engine {
   struct b1_voice voice[B1_VOICES];
@@ -41,6 +43,9 @@ struct b1_engine {
   uint8_t mixed_wheel_index[B1_TONEWHEELS];
   uint8_t mixed_wheel_count;
   uint8_t dense_mix_test_bypass; /* host A/B reference: do not serialize */
+  /* V3.3: ORGAN sine or bandlimited SAW across all 91 shared tonewheels. */
+  uint8_t osc_mode,osc_band[B1_TONEWHEELS];
+  uint16_t osc_blend_q15; /* 0=sine, 32767=saw, short click-free crossfade */
 
   uint32_t wheel_stamp[B1_TONEWHEELS];
   uint32_t wheel_frame, wheel_last_phase_frame;

@@ -74,3 +74,5 @@ build/b1-v26-audio-professional
 
 $CC -std=c11 -O2 -Wall -Wextra -Werror -pedantic -I firmware firmware/b1_engine.c firmware/b1_performance.c tests/native_v27_chord_workflow.c -o build/b1-v27-workflow
 build/b1-v27-workflow
+$CC -std=c11 -O2 -Wall -Wextra -Werror -pedantic -I firmware firmware/b1_engine.c firmware/b1_performance.c tests/native_v28_live_attack.c -o build/b1-v28-live-attack
+build/b1-v28-live-attack

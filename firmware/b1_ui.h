@@ -15,7 +15,7 @@ struct b1_ui_state {
  uint8_t name_cursor,project_storage_state,dirty_project;
  int8_t project_error;
  uint8_t audio_diag,audio_test,audio_safe;
- uint32_t audio_blocks,audio_misses;
+ uint32_t audio_blocks,audio_misses,audio_peak_us,ui_irq_peak_us;
  uint8_t ota_step; int32_t ota_error;
  uint8_t reclaim_armed;
  uint8_t project_notice;

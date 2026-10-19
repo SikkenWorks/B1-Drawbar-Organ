@@ -267,17 +267,22 @@ static int ota_ufw(uint8_t *hdr, uint32_t *fl_off, uint32_t *fl_len, uint32_t *o
  * A separate exact-image-checked official V15 restore route follows below. */
 #define ETCH_OTA_BODY_LEN 6898u
 #define ETCH_OTA_OWNER (OTA_RES+0x80u)
-static const uint8_t etch_ota_digest[32]={0xd0,0xb1,0xa0,0x5c,0x63,0x03,0x0b,0x58,0xe5,0xbe,0x06,0xb9,0x37,0x51,0xe6,0xcc,0x37,0x5d,0x3d,0x34,0xee,0xc5,0x84,0x10,0x9f,0x97,0xfd,0x31,0xf0,0xa4,0x2a,0x78};
+/* Exact immutable loader bytes, compiled into the B1 XIP image.  This is
+ * stricter than a checksum and avoids firmware-side SHA-256 discrepancies
+ * that manifested as OTA -16 on real B1 hardware.  External firmware with
+ * a different loader must use the independent UBOOT / vendor updater path. */
+#include "b1_pinned_loader.h"
 static const uint8_t etch_ota_owner[16]="BEETLE-OTA-STAGE";
 static const uint8_t etch_ota_old_owner[16]="ETCH-OTA-STAGE-1";
 static uint8_t ota_touched;
 static int etch_ota_hash(uint32_t off,uint8_t *b,uint8_t from_host){
- struct etch_sha256 h;uint8_t digest[32];etch_sha256_init(&h);
- for(uint32_t i=0;i<ETCH_OTA_BODY_LEN;){uint32_t n=ETCH_OTA_BODY_LEN-i;if(n>512)n=512;
+ for(uint32_t i=0;i<ETCH_OTA_BODY_LEN;){
+  uint32_t n=ETCH_OTA_BODY_LEN-i;if(n>512u)n=512u;
   if(from_host?ota_read(off+i,b,n):ota_fread(off+i,b,n))return 0;
-  etch_sha256_add(&h,b,n);i+=n;ota_idle();
+  if(!ota_memeq(b,b1_trusted_loader+i,n))return 0;
+  i+=n;ota_idle();
  }
- etch_sha256_end(&h,digest);return ota_memeq(digest,etch_ota_digest,32);
+ return 1;
 }
 /* No automatic claim of nonblank unknown bytes in this reserved region.
  * A complete pinned older loader or our ownership token permits a retry. */
@@ -376,7 +381,7 @@ static int ota_stage(void)                       /* steps 1..6; 0 = host said su
         if (crc != c)
             return -11;
     }
-    if(!official_stock_restore && !etch_ota_hash(OTA_AREA+32,b,0))return -16;
+    if(!official_stock_restore && !etch_ota_hash(OTA_AREA+32,b,0))return -18; /* staged flash readback mismatch */
     if (ota_stage_head(len))
         return -12;
     /* 6. the host confirms: nothing is committed without it */

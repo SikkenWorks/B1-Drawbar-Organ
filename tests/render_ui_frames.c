@@ -24,7 +24,10 @@ int main(int argc,char **argv){
  p.global_octave=5;emit(argv[1],"01b-octave-plus1",&s);p.global_octave=4;
  s.drawbar_page=1;emit(argv[1],"02-drawbars-upper-page2",&s);
  s.drawbar_page=2;emit(argv[1],"03-drawbars-upper-page3",&s);
- s.drawbar_page=0;p.selected_bank=1;
+ s.drawbar_page=0;s.page=9u;
+ emit(argv[1],"00-engine-mode-organ",&s);
+ e.osc_mode=B1_OSC_SAW;emit(argv[1],"00b-engine-mode-saw",&s);
+ e.osc_mode=B1_OSC_ORGAN;s.page=0;p.selected_bank=1;
  emit(argv[1],"04-drawbars-lower",&s);
  p.selected_bank=0;s.page=1;
  emit(argv[1],"05-leslie-drive",&s);
@@ -55,6 +58,7 @@ int main(int argc,char **argv){
  p.chord_mode=2u;s.page=6;s.chord_cursor=21;s.chord_quality=p.chord_map[21];emit(argv[1],"11-chord-assignment",&s);
  p.chord_mode=1u;emit(argv[1],"11c-chord-assign-off",&s);p.chord_mode=2u;
  p.range[2].attack=72u;emit(argv[1],"11d-chord-attack-72",&s);
+ p.range[2].attack=100u;emit(argv[1],"11e-chord-attack-100",&s);
  p.chord_map[21]=B1_MIN7;s.chord_quality=B1_MIN7;
  emit(argv[1],"11b-chord-assigned-min7",&s);
  s.page=5;s.project_error=0;emit(argv[1],"12-scale-keylock",&s);

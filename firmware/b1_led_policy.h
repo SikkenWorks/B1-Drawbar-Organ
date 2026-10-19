@@ -29,11 +29,19 @@ static void b1_apply_leds(const struct b1_performance *p,uint32_t physical_notes
  for(uint32_t btn=0;btn<B1_FM1_BUTTON_LED_COUNT;btn++){
   set_led(btn,btn==page_led);
  }
+ /* CHORD ASSIGN mode owns the note LEDs on performance pages: persistent
+  * light = active chord selector, dark = ordinary ORGAN/DISABLED key.
+  * SCALE is an explicit exception: it keeps its dedicated 48-scale GUIDE.
+  * While on the CHORD editor with ASSIGN OFF, all idle note LEDs are dark.
+  * Physical key-down feedback is preserved in every mode. */
+ uint8_t chord_display=(uint8_t)(current_page!=5u && b1_chord_enabled(p));
  for(uint32_t key=0;key<B1_KEYS;key++){
   int pressed=(physical_notes&(1u<<key))!=0u;
-  /* GUIDE is chromatic-pitch-only: CHORD/disabled ranges cannot override it. */
-  int guided=p->guide && b1_guide_key_allowed(p,(uint8_t)key);
-  set_led(B1_FM1_NOTE_LED_OFFSET+key,pressed || guided);
+  int led_on;
+  if(chord_display)led_on=b1_chord_selector_key(p,(uint8_t)key);
+  else if(current_page==6u)led_on=0;
+  else led_on=p->guide && b1_guide_key_allowed(p,(uint8_t)key);
+  set_led(B1_FM1_NOTE_LED_OFFSET+key,pressed || led_on);
  }
 }
 #endif

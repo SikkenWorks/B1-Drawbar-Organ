@@ -38,7 +38,8 @@ struct b1_project {
  /* V6 adds all FX settings and live performance setup. */
  uint8_t delay_mix,delay_time,delay_feedback,delay_spread;
  uint8_t reverb_type,reverb_mix,reverb_decay,reverb_damp;
- uint8_t global_octave,selected_bank,chord_mode; /* previously zeroed V6 padding byte */
+ uint8_t global_octave,selected_bank,chord_mode;
+ uint8_t osc_mode; /* V6 pre-checksum padding byte at offset 119, legacy zero = ORGAN. */
  uint32_t checksum;
 };
 void b1_performance_init(struct b1_performance *p);
@@ -54,6 +55,8 @@ void b1_release_all(struct b1_performance *p,struct b1_engine *e);
 /* Actual physical note-to-CHORD assignment and octave control; host-testable. */
 uint8_t b1_assign_chord_key(struct b1_performance *p,uint8_t physical_key,uint8_t chord_quality);
 uint8_t b1_chord_enabled(const struct b1_performance *p);
+/* Only actual active CHORD selector keys; chord_map alone is not an assignment. */
+uint8_t b1_chord_selector_key(const struct b1_performance *p,uint8_t physical_key);
 uint8_t b1_set_chord_enabled(struct b1_performance *p,struct b1_engine *e,uint8_t on);
 uint8_t b1_chord_attack(const struct b1_performance *p);
 uint8_t b1_set_chord_attack(struct b1_performance *p,uint8_t value);

@@ -1,4 +1,4 @@
-# SikkenWorks B1 V1.7 — Credits & license
+# SikkenWorks B1 — Credits & license
 
 SikkenWorks B1, © 2026 SikkenWorks.
 
@@ -24,7 +24,7 @@ The B1-specific additive tonewheel organ core, rotary/chorus DSP, chord performa
 
 ## Status
 
-B1 V1.7 includes a real, checksum-checked `.fwsc` OTA candidate with the protected BEETLE RC1.01 boot header and matching WebInstaller. Physical flashing, audio realtime performance, and restoration after failure have **not** been proven.
+B1 V3.8 includes a native pi32v2-compiled, checksum-checked `.fwsc` OTA candidate with the protected BEETLE RC1.01 boot header and matching WebInstaller. Physical flashing, audio realtime performance, and restoration after failure have **not** been proven.
 
 B1 reuses GPL-3.0-only OTA validation code in `firmware/ota.c` and `firmware/native_digest.c`, based on Felucca by Leo Kuroshita / Hügelton Instruments.
 

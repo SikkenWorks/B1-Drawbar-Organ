@@ -119,6 +119,15 @@ static const struct b1_range *range_for(const struct b1_performance *p,uint8_t k
  for(int i=(int)B1_RANGES-1;i>=0;i--)if(p->range[i].type<=B1_CHORD && (p->range[i].type!=B1_CHORD||p->chord_mode!=1u) && key>=p->range[i].lo && key<=p->range[i].hi)return &p->range[i];
  return 0;
 }
+/* Resolve active keyboard ownership exactly as note-on routing does.
+ * Merely having a quality in chord_map does not turn an ORGAN key into a
+ * chord selector. Higher-numbered ranges override lower-numbered ones.
+ * This query is used ONLY by the UI LED refresh (never the audio ISR). */
+uint8_t b1_chord_selector_key(const struct b1_performance *p,uint8_t physical_key){
+ if(!p||physical_key>=B1_KEYS||!b1_chord_enabled(p))return 0u;
+ const struct b1_range *r=range_for(p,physical_key);
+ return (uint8_t)(r&&r->type==B1_CHORD);
+}
 static uint8_t midi_key(uint8_t key,int8_t octave){int32_t n=(int32_t)B1_KEYBOARD_LOW_MIDI+(int32_t)key+(int32_t)octave*12;return (uint8_t)(n<0?0:n>127?127:n);}
 uint8_t b1_note_allowed(const struct b1_performance *p,uint8_t n){
  uint8_t rel=(uint8_t)((n+12u-(p->scale_root%12u))%12u);
@@ -226,24 +235,41 @@ void b1_performance_keys(struct b1_performance *p,struct b1_engine *e,uint32_t k
    h->pending[h->count]=0u;h->due[h->count]=p->clock;
    h->count++;
   }
-  /* 0 is *exactly* simultaneous. At >0 each note obtains a different random
-   * offset inside a 0..45ms window (quadratic knob response). Subtract the
-   * minimum offset: one note starts at the actual key press, the other notes
-   * may be earlier or later RELATIVE TO EACH OTHER. No note can precede the
-   * physical trigger without introducing unwanted latency. */
+  /* B1 V2.8: visibly effective humanized attack, rather than drawing
+   * independent random samples which may accidentally all land at nearly
+   * the same instant. The span is 0..~65ms, quadratic across 1..100.
+   * First note is immediate; subsequent note positions are individually
+   * jittered within STRATIFIED time cells and their order is shuffled.
+   * This guarantees a musical spread at high settings without a fixed
+   * root-first arpeggio. Every random operation occurs at NOTE-ON, never
+   * in the realtime sample loop. */
   if(chord!=255u&&attack>0u&&h->count>1u){
-   uint32_t window=((uint32_t)attack*(uint32_t)attack*1985u)/10000u;
-   if(!window)window=1u;
-   uint32_t offsets[B1_MAX_CHORD_NOTES],earliest=0xffffffffu;
-   for(uint8_t i=0;i<h->count;i++){
-    offsets[i]=b1_random(p)%(window+1u);
-    if(offsets[i]<earliest)earliest=offsets[i];
+   uint32_t window=((uint32_t)attack*(uint32_t)attack*2866u)/10000u;
+   if(window<h->count-1u)window=h->count-1u;
+   uint8_t order[B1_MAX_CHORD_NOTES];
+   for(uint8_t i=0;i<h->count;i++)order[i]=i;
+   for(uint8_t i=h->count-1u;i>0u;i--){
+    uint8_t j=(uint8_t)(b1_random(p)%(i+1u));
+    uint8_t tmp=order[i];order[i]=order[j];order[j]=tmp;
    }
+   uint32_t last=0u;
    for(uint8_t i=0;i<h->count;i++){
-    uint32_t offset=offsets[i]-earliest;
-    h->due[i]=p->clock+offset;h->pending[i]=offset?1u:0u;
+    /* Random jitter contained inside each position's time cell. */
+    uint32_t offset=0u;
+    if(i){
+     uint32_t lower=((uint32_t)i*window)/(h->count-1u);
+     uint32_t upper=i==h->count-1u?window:((uint32_t)(i+1u)*window)/(h->count-1u)-1u;
+     if(upper<lower)upper=lower;
+     offset=lower+(b1_random(p)%(upper-lower+1u));
+     if(offset<=last)offset=last+1u;
+     if(offset>window)offset=window;
+    }
+    last=offset;
+    uint8_t j=order[i];
+    h->due[j]=p->clock+offset;
+    h->pending[j]=offset?1u:0u;
     if(offset)p->pending_mask|=(1u<<k);
-    if(!offset)b1_note_on_tagged(e,h->note[i],h->bank[i],115u,(uint32_t)k+1u);
+    else b1_note_on_tagged(e,h->note[j],h->bank[j],115u,(uint32_t)k+1u);
    }
   }else{
    for(uint8_t i=0;i<h->count;i++)b1_note_on_tagged(e,h->note[i],h->bank[i],115u,(uint32_t)k+1u);
@@ -302,7 +328,7 @@ int b1_project_valid(const struct b1_project *o){
     (o->rotor_drum_pct && (o->rotor_drum_pct<50u || o->rotor_drum_pct>150u)))return 0;
  if(o->delay_mix>100u||o->delay_time>100u||o->delay_feedback>90u||o->delay_spread>100u||
    o->reverb_type>4u||o->reverb_mix>100u||o->reverb_decay>100u||o->reverb_damp>100u||
-   o->global_octave>8u||o->selected_bank>=B1_BANKS||o->chord_mode>2u)return 0;
+   o->global_octave>8u||o->selected_bank>=B1_BANKS||o->chord_mode>2u||o->osc_mode>B1_OSC_SAW)return 0;
  return 1;
 }
 void b1_project_capture(struct b1_project *o,const struct b1_performance *p,const struct b1_engine *e){
@@ -320,6 +346,7 @@ void b1_project_capture(struct b1_project *o,const struct b1_performance *p,cons
  o->reverb_type=e->reverb_type;o->reverb_mix=e->reverb_mix;o->reverb_decay=e->reverb_decay;o->reverb_damp=e->reverb_damp;
  o->global_octave=p->global_octave;o->selected_bank=p->selected_bank;
  o->chord_mode=(p->chord_mode==1u?1u:2u);
+ o->osc_mode=e->osc_mode;
  o->checksum=project_hash(o);
 }
 int b1_project_apply(const struct b1_project *o,struct b1_performance *p,struct b1_engine *e){
@@ -338,6 +365,7 @@ int b1_project_apply(const struct b1_project *o,struct b1_performance *p,struct 
  e->reverb_type=o->reverb_type;e->reverb_mix=o->reverb_mix;e->reverb_decay=o->reverb_decay;e->reverb_damp=o->reverb_damp;
  p->global_octave=o->global_octave;p->selected_bank=o->selected_bank;
  p->chord_mode=o->chord_mode; /* 0 means legacy auto-detect; old CRC stays valid. */
+ e->osc_mode=o->osc_mode; /* blend smoothly; do not reset continuous wheel phases. */
  e->amp_hp=0;e->amp_tone_lp=0;e->cab_bass=0;e->cab_treble=0;
  return 1;
 }

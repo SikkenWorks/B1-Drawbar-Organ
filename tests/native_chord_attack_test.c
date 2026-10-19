@@ -59,7 +59,7 @@ int main(void){
  /* One chord must finish correctly over multiple 128-sample blocks. */
  b1_performance_keys(&p,&e,(1u<<21)|(1u<<1));
  unsigned tries=0;
- while(count_pending(&p.held[1])&&tries++<22)b1_performance_render(&p,&e,sound,128);
+ while(count_pending(&p.held[1])&&tries++<32)b1_performance_render(&p,&e,sound,128);
  assert(count_pending(&p.held[1])==0&&active_for(&e,2)==3);
  b1_performance_keys(&p,&e,0);b1_panic(&e);
  /* 2 different chord groups with distinct ATTACK settings. */

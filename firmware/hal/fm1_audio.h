@@ -91,5 +91,18 @@ FM1_INLINE void fm1_audio_ack_aux(uint8_t p)   /* the other three pendings */
         FM1_ALNK_CON2 |= 4u;
 }
 FM1_INLINE uint32_t fm1_audio_free_half(void) { return ((FM1_ALNK_CON0 >> 15) & 1u) ^ 1u; }   /* 0 / 1 */
+/* Derived from the publicly released M-VAVE FM1 Open V12 board driver.
+ * Read the DMA selector on BOTH sides of the half-pending flag: the hardware
+ * can switch halves independently of CPU interrupt masking. The HALF flag is
+ * acknowledged at ISR ENTRY so it means *new* work, not the current IRQ.
+ * This does not grant ownership beyond the instant of the check: finish DMA
+ * writes comfortably before the hard deadline and check again afterwards. */
+FM1_INLINE uint8_t fm1_audio_half_owned(uint32_t half)
+{
+    uint32_t first = fm1_audio_free_half();
+    uint8_t pending = fm1_audio_pending();
+    uint32_t second = fm1_audio_free_half();
+    return (uint8_t)(first == half && second == half && !(pending & FM1_AUDIO_HALF));
+}
 FM1_INLINE void fm1_audio_ack_half(void) { FM1_ALNK_CON2 |= 0x08u; }
 FM1_INLINE void fm1_audio_stop(void) { FM1_ALNK_CON0 &= ~0x800u; }

@@ -1,5 +1,19 @@
 [
   {
+    "name": "00-engine-mode-organ",
+    "raw_sha256": "e0ed9397217d53fb4cf853ded30ee2ce76762ca64f47bf1acae5e6d42ff5d6ab",
+    "png": "00-engine-mode-organ.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "00b-engine-mode-saw",
+    "raw_sha256": "d4b18b2c85b59b115df039237618a84a37815c4cf49bb5b47c15c555d073dfdd",
+    "png": "00b-engine-mode-saw.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
     "name": "01-drawbars-upper-page1",
     "raw_sha256": "baf920a57a6365e60dfaf921187cdaddbf99a142a88ae3b9cbc2feb1bea2f065",
     "png": "01-drawbars-upper-page1.png",
@@ -162,29 +176,36 @@
   },
   {
     "name": "11-chord-assignment",
-    "raw_sha256": "7d19e79a0f61ec609f9ddc00504a4eab1e67b9e7abf74bed0b003406995d52eb",
+    "raw_sha256": "f4fab545e8c9f7a90cdb3a4ca52de5048ead20ae4e0dad11f32119496ccdb078",
     "png": "11-chord-assignment.png",
     "pixels": "240x240",
     "origin": "firmware/b1_ui.c"
   },
   {
     "name": "11b-chord-assigned-min7",
-    "raw_sha256": "c82c58f53e8c44688d008ceac5c2299ec8423ac8c939bb2f050aa63d7d489eac",
+    "raw_sha256": "40fa73f9ab1cdde96ea489f5e91a8c81d356b679a613eb12248af5c4f43c402b",
     "png": "11b-chord-assigned-min7.png",
     "pixels": "240x240",
     "origin": "firmware/b1_ui.c"
   },
   {
     "name": "11c-chord-assign-off",
-    "raw_sha256": "8dedc9552fc6744617efcce04e2fbc84c158d6696bb523f66f506774900d8885",
+    "raw_sha256": "869ce741d2cb88350082b159c836dacd8d279b1aa2a6e720eed09af469c6be4d",
     "png": "11c-chord-assign-off.png",
     "pixels": "240x240",
     "origin": "firmware/b1_ui.c"
   },
   {
     "name": "11d-chord-attack-72",
-    "raw_sha256": "7d19e79a0f61ec609f9ddc00504a4eab1e67b9e7abf74bed0b003406995d52eb",
+    "raw_sha256": "f4fab545e8c9f7a90cdb3a4ca52de5048ead20ae4e0dad11f32119496ccdb078",
     "png": "11d-chord-attack-72.png",
+    "pixels": "240x240",
+    "origin": "firmware/b1_ui.c"
+  },
+  {
+    "name": "11e-chord-attack-100",
+    "raw_sha256": "af2fcec006f041ae378a8316f8f049959805b07eed55b57e2f94d637d0cc7e42",
+    "png": "11e-chord-attack-100.png",
     "pixels": "240x240",
     "origin": "firmware/b1_ui.c"
   },
@@ -267,7 +288,7 @@
   },
   {
     "name": "12k-audio-diagnostic",
-    "raw_sha256": "eecab63c98081655956bdc03108b55c18cdf1ab581679ae4f1552fcad44e8298",
+    "raw_sha256": "f7fd43698294d8057402705ae994b6f1bbaa0f742ef57ff2ad93c5e9d54e088a",
     "png": "12k-audio-diagnostic.png",
     "pixels": "240x240",
     "origin": "firmware/b1_ui.c"

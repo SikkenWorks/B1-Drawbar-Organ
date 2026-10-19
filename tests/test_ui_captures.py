@@ -6,7 +6,7 @@ from PIL import Image
 root=Path(__file__).resolve().parent.parent
 cap=root/'ui-captures'
 records=json.loads((cap/'CAPTURE-MANIFEST.json').read_text())
-assert len(records)==64,(len(records),'screens')
+assert len(records)==67,(len(records),'screens')
 for r in records:
     raw=(cap/(r['name']+'.rgb565')).read_bytes()
     assert len(raw)==240*240*2, (r['name'],'wrong raw size')
@@ -19,4 +19,4 @@ for r in records:
             rgb=bytes((((v>>11)&31)*255//31,((v>>5)&63)*255//63,(v&31)*255//31))
             if img[3*i:3*i+3]!=rgb:raise AssertionError((r['name'],i,'PNG pixel differs from actual native framebuffer'))
     assert len(set(raw))>15 or r['name'].startswith('boot-'),(r['name'],'suspicious blank image')
-print('Exact 240x240 framebuffer -> PNG comparisons: 64/64 PASS')
+print('Exact 240x240 framebuffer -> PNG comparisons: 67/67 PASS')

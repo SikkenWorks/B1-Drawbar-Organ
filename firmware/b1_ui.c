@@ -207,6 +207,24 @@ void b1_ui_render(uint16_t *frame,const struct b1_ui_state *s){
   char n[14];number(s->drawbar_page+1,n);
   char page[9]="PAGE 1/3";page[5]=n[0];
   foot("SELECT: PAGE",page);
+ }else if(s->page==9u){
+  static const int8_t sine_shape[32]={0,3,6,9,11,13,15,16,16,16,15,13,11,9,6,3,0,-3,-6,-9,-11,-13,-15,-16,-16,-16,-15,-13,-11,-9,-6,-3};
+  uint8_t saw=s->audio->osc_mode==B1_OSC_SAW;
+  top("ENGINE MODE","EXPERIMENTAL");
+  text("K1  OSCILLATOR TYPE",14,85,0,MUTED);
+  text(saw?"SAWTOOTH":"SINE / ORGAN",14,105,1,AMBER);
+  rect(14,133,212,1,LINE);
+  rect(14,141,212,57,PANEL);
+  /* Wavetable overview: two periods. Source of audio remains shared tonewheels. */
+  for(int x=0;x<192;x++){
+   int idx=((x%96)*32)/96;
+   int v=saw?(15-idx):sine_shape[idx];
+   int y=168-v;
+   rect(24+x,y,2,2,AMBER);
+   if(saw && (x%96)==95)rect(24+x,153,1,32,AMBER);
+  }
+  text("91 WHEELS / 3 BANKS + PERC",14,205,0,MUTED);
+  foot("HOME: BACK", "K1: CHANGE");
  }else if(s->page==1u){
   if(s->fx_page==0u){
    top("LESLIE / DRIVE","FX 1/6");
@@ -309,7 +327,7 @@ void b1_ui_render(uint16_t *frame,const struct b1_ui_state *s){
   else if(s->project_error==-15)text("NO FREE RANGE SLOT",14,208,0,PINK);
   else if(b1_chord_enabled(s->keys))text("PRESS KEY TO ASSIGN",14,208,0,AMBER);
   else text("K3: TURN ON TO ASSIGN",14,208,0,MUTED);
-  foot("KEY ASSIGN / HUMAN ATTACK",0);
+  foot("LIT=CHORD   DARK=KEYS",0);
  }else if(s->page==5u){
   if(s->audio_diag){
    top("AUDIO DIAG",0);
@@ -317,6 +335,22 @@ void b1_ui_render(uint16_t *frame,const struct b1_ui_state *s){
    field("K2  SAFE DSP",s->audio_safe?"ON":"AUTO",118,WHITE);
    field_num("DMA BLOCKS",(int)(s->audio_blocks%10000u),153,WHITE);
    field_num("DMA MISSES",(int)(s->audio_misses%10000u),188,s->audio_misses?PINK:WHITE);
+   char peak_label[24], peak_value[16];
+   number((int)s->audio_peak_us,peak_value);
+   unsigned peak_len=0u;
+   const char *prefix="PEAK ";
+   for(unsigned n=0u;prefix[n] && peak_len<sizeof(peak_label)-1u;n++)peak_label[peak_len++]=prefix[n];
+   for(unsigned n=0u;peak_value[n] && peak_len<sizeof(peak_label)-4u;n++)peak_label[peak_len++]=peak_value[n];
+   peak_label[peak_len++]=' ';peak_label[peak_len++]='U';peak_label[peak_len++]='S';peak_label[peak_len]=0;
+   text(peak_label,14,209,0,MUTED);
+   /* V3.7: maximum UI interrupt-mask time, not the entire event handler. */
+   char control_value[16],control_line[24];
+   number((int)s->ui_irq_peak_us,control_value);
+   unsigned q=0u; const char *cp="UI ";
+   for(unsigned n=0;cp[n]&&q<sizeof(control_line)-1u;n++)control_line[q++]=cp[n];
+   for(unsigned n=0;control_value[n]&&q<sizeof(control_line)-4u;n++)control_line[q++]=control_value[n];
+   control_line[q++]=' ';control_line[q++]='U';control_line[q++]='S';control_line[q]=0;
+   text(control_line,126,209,0,MUTED);
    foot("SELECT: SCALE",0);
   }else{
   top("SCALE / KEYLOCK",0);

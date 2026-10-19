@@ -313,12 +313,26 @@ static void fm1__key(uint32_t id, uint32_t closed)
     }
 }
 
+/* V4.3: the diode matrix still samples every column every 100us, but the
+ * debounce handler need not revisit settled, unchanged keys.  One pending
+ * bit per column retains the EXACT original press/release scan timing while
+ * a contact is bouncing or progressing through its debounce threshold.
+ * Columns are fully examined on any actual key-row change (encoder-only rows
+ * do not matter) or while any key has a nonzero debounce counter. */
+#include "b1_keyscan_fast.h"
+static uint8_t fm1__key_pending[FM1_NCOL];
 static void fm1__keys(uint32_t p)                  /* the keys of column p, just read */
 {
     uint32_t r, raw = fm1_in.raw[p];
-    for (r = 1; r < 5u; r++)
-        if (FM1_KEYMAP[r][p] >= 0)
-            fm1__key((uint32_t)FM1_KEYMAP[r][p], (raw >> r) & 1u);
+    uint8_t pending = 0u;
+    for (r = 1; r < 5u; r++) {
+        int32_t id = FM1_KEYMAP[r][p];
+        if (id >= 0) {
+            fm1__key((uint32_t)id, (raw >> r) & 1u);
+            pending |= (uint8_t)(fm1_in.cnt[(uint32_t)id] != 0u);
+        }
+    }
+    fm1__key_pending[p] = pending;
 }
 
 static void fm1__frame(void);
@@ -501,7 +515,7 @@ static void fm1_input_tick(void)
 {
     uint32_t p = fm1__tick_col, n = p + 1u == FM1_NCOL ? 0u : p + 1u;
     uint32_t t0 = fm1_ticks(), g = t0 - fm1_in_stat.last, b = 0;
-    uint32_t w = 0xFFFFu ^ (1u << n) ^ (n < 2u ? 1u << (11u + n) : 0u), lit, dim = 0, k = fm1__dim_k;
+    uint32_t w = b1_column_shift_word[n], lit, dim = 0, k = fm1__dim_k;
     uint32_t br = 0, kb = 0;
     fm1__led_lines(0);
     fm1_in_stat.last = t0;
@@ -513,6 +527,7 @@ static void fm1_input_tick(void)
     fm1_in_stat.on[p] += g;
     if (g > fm1_in_stat.on_max[p])
         fm1_in_stat.on_max[p] = g;
+    uint8_t old_key_rows = fm1_in.raw[p];
     fm1_in.raw[p] = (uint8_t)fm1__rows();          /* column p has been latched one tick (the lines dark) */
     if (p == 0u)
         fm1__breath_frame();
@@ -556,7 +571,11 @@ static void fm1_input_tick(void)
         fm1__mid_ph = (uint8_t)(fm1__mid_ph + 1u >= fm1__mid_n ? 0u : fm1__mid_ph + 1u);
     fm1__led_lines(FM1__LIT(n));
     fm1__tick_col = (uint8_t)n;
-    fm1__keys(p);                                  /* its keys now: no wait for the frame's end */
+    /* Even on a stable keyboard, every physical column, encoder and LED is
+     * still scanned at full speed. Only pure key debounce work is bypassed. */
+    if (b1_keyscan_needs_processing(fm1_in.raw[p], old_key_rows,
+                                    fm1__key_pending[p], b1_key_row_mask[p]))
+        fm1__keys(p);                              /* original latency on transitions */
     if (n == 0u) {
         fm1__frame();
         if (fm1__an_f)                             /* the power-on sweep: the next frame's picture */
