@@ -1,3 +1,11 @@
+## Installer HF2 — SLOOP/Felucca source compatibility (no firmware changes)
+
+- Removed the source-identity CONNECT block for SLOOP (`FM-1_900`).
+- Added the documented `ota-FM-1_9xx` loader family to the CHECK/LOADER/WRITE transition.
+- Advanced Mode now controls only foreign *target* firmware selection, not the source identity.
+- Preserved all target SHA-256, UFW CRC, boot header and loader checks.
+- Source-format and loader compatibility still must be validated on real hardware.
+
 ## V4.3 Installer HF1 (firmware unchanged)
 
 - Prevent Advanced Mode from unchecking itself when choosing another firmware.
@@ -51,6 +59,19 @@ Version history and technical notes for **SikkenWorks B1**, the drawbar-organ fi
 This file contains release-specific changes, build validation, performance measurements and outstanding hardware-verification limits. For an overview of the instrument and its controls, see the [README](README.md).
 
 ---
+
+## V4.4 — October 19, 2026 (Native cross-firmware OTA repair)
+
+- **Fix actual on-device updater, not merely the WebInstaller.** Remove blanket protected-bootheader byte-match `-5` for validated APP_ONLY updates; protect the existing boot sector by never writing it from an APP_ONLY package.
+- **Fix overly strict loader-body rejection `-16` for compatible app-only firmware.** Validate the foreign `ota.bin` container and complete payload CRC; never execute its untrusted loader body. Stage and read back the exact pinned, previously used B1/Felucca app-only loader instead. Continue reporting its real identity `ota-FM-1_015` across reboot.
+- Validate incoming UFW entries for CRC, duplicates, boundary overflow and overlap; check target AC791N chip key 0x980F, XIP 0x02000120, app flash 0x4000 and fully decrypted app.bin slot CRC before any staging erasure.
+- Keep exact-hash-gated official V15 FULL_FLASH as a distinct, non-universal restore route. Retain the mandatory `0xE0000000` / eight-byte `success` handshake, staging verification, ownership protection and cancellation behavior.
+- Add **real native packet-replay** tests that reproduce baseline V4.3 `-5`, `-16`, and corrupt-app commit, and verify 10 passing V4.4 cases, including aborts and erase failures. See `docs/V4.4-NATIVE-OTA-AUDIT.md`.
+- New AC791N target-compiled firmware identity `FM-1_2146`, same protected BEETLE boot header, and refreshed SHA-256-pinned SLOOP-HF2-compatible WebInstaller.
+- The audio, 91 shared tonewheels, 12 voices, keyboard handling, effects, KEY ASSIGN LEDs and persistent project layout are **unchanged**. Actual physical cross-flashing, original Felucca release packages and official V15 stock restore still require testing. The BEETLE and NERVE native installed updater sources are **not audited** in this B1 release.
+
+
+
 
 ## V3.9 — October 18, 2026 (bit-exact DSP efficiency)
 

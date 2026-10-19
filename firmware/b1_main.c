@@ -1,4 +1,4 @@
-/* SikkenWorks B1 V4.3 (Lossless keyscan fast path; Smart Idle + KEY ASSIGN intact). GPL-3.0-only, custom FM1 executable.
+/* SikkenWorks B1 V4.4 (Lossless keyscan fast path; Smart Idle + KEY ASSIGN intact). GPL-3.0-only, custom FM1 executable.
  * Felucca platform HAL © Leo Kuroshita / Hügelton Instruments.
  * FLASH POLICY: OTA staging plus B1-owned, dynamically selected verified-safe two-sector journal.
  * BEETLE project data at 0x97000..0xDFFFF is never modified.
@@ -36,7 +36,7 @@
 #define FELUCCA_OTA 1
 #define FELUCCA_OTA_DRYRUN 0
 #define FELUCCA_UAC 0
-#define FELUCCA_ID "FM-1_2145"
+#define FELUCCA_ID "FM-1_2146"
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
 #define HALF_FRAMES 128u
 #include "usb.c"

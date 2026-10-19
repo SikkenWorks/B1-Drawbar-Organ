@@ -1,0 +1,11 @@
+PASS /tmp/b1-ota-replay-e7aqxtow/B1_same-family_V4_3.ufw rc=0 reads=2334 special=1 erases=5 writes=17 commits=1 ms=4700 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-e7aqxtow/Original_BEETLE_RC1_01.ufw rc=0 reads=2334 special=1 erases=5 writes=17 commits=1 ms=4700 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-e7aqxtow/Foreign_protected_flash-header_APP_ONLY.ufw rc=0 reads=2334 special=1 erases=5 writes=17 commits=1 ms=4700 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-e7aqxtow/Unknown_incoming_loader_never_executed.ufw rc=0 reads=2334 special=1 erases=5 writes=17 commits=1 ms=4700 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-e7aqxtow/Corrupt_XIP_app_rejected.ufw rc=-24 reads=2333 special=0 erases=0 writes=0 commits=0 ms=4659 stageId=
+PASS /tmp/b1-ota-replay-e7aqxtow/Wrong_chip_key_rejected.ufw rc=-22 reads=1196 special=0 erases=0 writes=0 commits=0 ms=2386 stageId=
+PASS /tmp/b1-ota-replay-e7aqxtow/Missing_success_ACK___cleanup.ufw rc=-13 reads=2337 special=4 erases=10 writes=16 commits=0 ms=4703 stageId=
+PASS /tmp/b1-ota-replay-e7aqxtow/User_abort___no_commit.ufw rc=-25 reads=27 special=0 erases=0 writes=0 commits=0 ms=51 stageId=
+PASS /tmp/b1-ota-replay-e7aqxtow/Injected_erase_failure___no_commit.ufw rc=-17 reads=2333 special=0 erases=2 writes=0 commits=0 ms=4699 stageId=
+PASS /tmp/b1-ota-replay-e7aqxtow/Overlapping_UFW_entries_rejected.ufw rc=-3 reads=2 special=0 erases=0 writes=0 commits=0 ms=2 stageId=
+PASS: B1 V4.4 native OTA packet-level replay. NOT a physical flash test.
