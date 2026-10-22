@@ -3,14 +3,14 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#define FELUCCA_ID "FM-1_2146"
+#define FELUCCA_ID "FM-1_2147"
 #define FELUCCA_OTA_DRYRUN 0
 #include "ota.c"
 static uint8_t *package;static uint32_t package_len;
 static uint8_t stage[OTA_AREA_LEN], protected_boot[0x4000];
 static uint8_t response[700];static uint32_t response_len;
 static uint32_t ms, reads, erases, writes, commits, special_requests;
-static int deny_success, cancelled, io_failure;
+static int deny_success, cancelled, io_failure, readback_corrupt;
 static uint8_t committed[112];
 static void reply(uint32_t addr,uint32_t size){
  uint8_t dec[560];
@@ -55,7 +55,7 @@ static int ota_prog(uint32_t off,const void *p,uint32_t n){
 }
 static int ota_fread(uint32_t off,void *p,uint32_t n){
  if(off<0x4000u&&n<=0x4000u-off){memcpy(p,protected_boot+off,n);return 0;}
- if(off>=OTA_AREA&&off<=OTA_AREA+OTA_AREA_LEN&&n<=OTA_AREA+OTA_AREA_LEN-off){memcpy(p,stage+off-OTA_AREA,n);return 0;}
+ if(off>=OTA_AREA&&off<=OTA_AREA+OTA_AREA_LEN&&n<=OTA_AREA+OTA_AREA_LEN-off){memcpy(p,stage+off-OTA_AREA,n);if(readback_corrupt && writes>2u && off>=OTA_AREA+32u && off<OTA_AREA+0x2000u) ((uint8_t*)p)[0]^=0x10u;return 0;}
  return -1;
 }
 static void ota_show(uint32_t step,int32_t code){(void)step;(void)code;}
@@ -69,11 +69,20 @@ int main(int argc,char **argv){
  f=fopen(argv[2],"rb");if(!f)return 3;
  if(fread(protected_boot,1,sizeof protected_boot,f)!=sizeof protected_boot)return 3;fclose(f);
  memset(stage,255,sizeof stage);
- if(argc>4){deny_success=!strcmp(argv[4],"no-success");cancelled=!strcmp(argv[4],"cancel");io_failure=!strcmp(argv[4],"erase-fail");}
- int rc=ota_session();int pass=!strcmp(argv[3],"expect_pass");
+ int variant_expected=argc>4 && !strcmp(argv[4],"incoming");
+ if(argc>4){deny_success=!strcmp(argv[4],"no-success");cancelled=!strcmp(argv[4],"cancel");io_failure=!strcmp(argv[4],"erase-fail");readback_corrupt=!strcmp(argv[4],"readback-corrupt");}
+ int rc=ota_session();int pass=!strcmp(argv[3],"expect_pass"), prereject=!strcmp(argv[3],"expect_prereject");
  int boot_ok=1;/* boot[] was never writable by this harness */
- int ok=(pass?(rc==0&&commits==1&&special_requests>=1):
-              (rc!=0&&commits==0))&&boot_ok;
+ if(pass&&variant_expected&&rc==0){
+   /* The staged writer must be the complete validated external body, not
+    * merely the old pinned loader that caused cross-firmware limitations. */
+   uint8_t hdr[1024];uint32_t flo,fln,olo,oln;
+   if(ota_ufw(hdr,&flo,&fln,&olo,&oln)!=0||oln<32u||
+      ota_rd32(stage+8)!=oln||memcmp(stage+32,package+olo+32,oln-32u))boot_ok=0;
+ }
+ int known_loader_ok=(variant_expected || !memcmp(stage+32,b1_trusted_loader,ETCH_OTA_BODY_LEN));
+ int ok=(pass?(rc==0&&commits==1&&special_requests>=1 && erases==5u && writes>=2u && known_loader_ok && !memcmp(committed+8,"ota-FM-1_015",12)):
+              (rc!=0&&commits==0&&(!prereject||(erases==0&&writes==0&&special_requests==0))))&&boot_ok;
  printf("%s %s rc=%d reads=%u special=%u erases=%u writes=%u commits=%u ms=%u stageId=%.*s\n",
    ok?"PASS":"FAIL",argv[1],rc,reads,special_requests,erases,writes,commits,ms,12,committed+8);
  free(package);return ok?0:1;

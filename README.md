@@ -190,3 +190,6 @@ B1 is released under **GPL-3.0-only**. The included Inter font is subject to its
 [Version history](CHANGELOG.md)
 
 </div>
+
+
+**Firmware package identity policy:** The native application, USB-MIDI identification and `.fwsc` product marker remain `FM-1_2147` for V4.6 and future revisions unless the owner explicitly changes this requirement. Do not derive product IDs from release labels.

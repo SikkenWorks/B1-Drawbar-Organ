@@ -1,3 +1,44 @@
+# Changelog
+
+Version history and technical notes for **SikkenWorks B1**, the drawbar-organ firmware for the M-VAVE FM-1.
+
+This file contains release-specific changes, build validation, performance measurements and outstanding hardware-verification limits. For an overview of the instrument and its controls, see the [README](README.md).
+
+---
+
+## V4.6 — The Firmware Hub cross-firmware OTA compatibility (2026-10-22)
+
+- Retain the exact B1 V4.5 package/USB identity `FM-1_2147` (no new product ID).
+- Native OTA CHECK now recognizes version-tagged `FELUCCA-LOADER-1` compatible incoming loader containers, checks complete incoming body CRC16 independently of UFW entry CRC, validates existing header, runtime entry address, size and protected staging boundaries. Loaders that match only the first 6,898 bytes but are larger are treated as distinct incoming loaders (fixes a staging-length false match).
+- Keep B1's original pinned loader for known input; stage a different, fully container- and CRC-validated `FELUCCA-LOADER-1` second-stage writer for other structurally compatible Felucca-family packages. The Firmware Hub must SHA-256-pin the original package; CRC alone cannot prove authorship.
+- Verify read-back CRC16 of the *actual staged loader* before special `success` acknowledgment and commit.
+- Keep APP_ONLY boot-header independence, exact chip/app/XIP/CRC checks, verified stock V15 separate path, USB-MIDI and recovery unchanged.
+- Native OTA packet replays include real B1/BEETLE reference packages and checksum-consistent mutations; actual Felucca 1.6, 1.1.5, stock V15 and hardware firmware switching remain unverified without those fixtures/devices.
+- Audio, MIDI, UI, storage and performance engine are byte-for-byte unchanged from V4.5.
+
+## V4.5 — October 19, 2026 (Polyphonic realtime DSP performance)
+
+- **Respond to physical FM1 feedback:** audio in V4.4 no longer exhibits the earlier severe square-wave issue, but crackling begins at about three simultaneous notes. V4.5 targets expensive per-sample computations in the three-plus-voice and Hammond percussion paths. This is a hardware-test candidate, **not yet a confirmed fix for hardware crackling**.
+- **Preserve all audio results:** retain 91 free-running shared tonewheels, nine drawbars, twelve voices, the original voice-stealing policy, ORGAN/SAW, B3/ROCK, key-click/leakage, single-trigger shared Hammond percussion, scanner, Leslie, delay, reverb and MIDI/CHORD/KEY ASSIGN. No reduced sample rate, effects downgrade, harmonic drop or fixed voice cap.
+- **Faster dense chord phase bookkeeping:** when the mixer has a unique list of sounding wheels, align their virtual phase to the chunk start once and then increment directly per sample. Skip redundant per-wheel cache checks. Where percussion does not need the per-sample wheel memo, defer two stamp writes per wheel to the end of the render chunk. Preserve exact memo state, first-sample phase, drawbar ramp, rare 32-bit clock wrap and transitions back to transient rendering.
+- **Exact shared-percussion divider:** algebraically replace the signed 64-bit division by 260,000 with a fixed native 32-bit split, relying on `260000 = 32*8125`. Preserve signed truncation precisely; keep the old wide fallback if the bus/envelope are outside documented bounds. Native test checks 2,000,285 input pairs against the unmodified signed 64-bit formula.
+- **Exact polyphonic voice-envelope multiply:** use native signed 32-bit multiplication when ORGAN or SAW waveform blending is settled. Worst-case normal drawbar, key-click and leakage bounds fit in 32 bits. Keep the previous 64-bit path during the oscillator crossfade to preserve exceptional transient values.
+- A rejected initial optimization that prebuilt every voice's active-harmonic list was **not shipped**, because host measurements showed it could increase cost. The remaining paths pass differential tests against the untouched V4.4 PCM engine and entire DSP state for 96 configurations (1–12 voices, combinations of SAFE/FULL, ROCK/B3, ORGAN/SAW, maximal drawbars and exaggerated click/leakage), plus long-idle comparisons, historic golden PCM, ORGAN/SAW/FX and KEY ASSIGN LED regressions.
+- Native AC791N firmware identity **`FM-1_2147`**, checksum-verified 610,086-byte `.fwsc`, exact SHA-256-pinned WebInstaller preserving the proven SLOOP/Felucca HF2 source path, original protected 16KiB boot region and V4.4 native OTA safety repairs. No physical hardware timing/flash/rollback result is claimed.
+
+## V4.4 — October 19, 2026 (Native cross-firmware OTA repair)
+
+- **Fix actual on-device updater, not merely the WebInstaller.** Remove blanket protected-bootheader byte-match `-5` for validated APP_ONLY updates; protect the existing boot sector by never writing it from an APP_ONLY package.
+- **Fix overly strict loader-body rejection `-16` for compatible app-only firmware.** Validate the foreign `ota.bin` container and complete payload CRC; never execute its untrusted loader body. Stage and read back the exact pinned, previously used B1/Felucca app-only loader instead. Continue reporting its real identity `ota-FM-1_015` across reboot.
+- Validate incoming UFW entries for CRC, duplicates, boundary overflow and overlap; check target AC791N chip key 0x980F, XIP 0x02000120, app flash 0x4000 and fully decrypted app.bin slot CRC before any staging erasure.
+- Keep exact-hash-gated official V15 FULL_FLASH as a distinct, non-universal restore route. Retain the mandatory `0xE0000000` / eight-byte `success` handshake, staging verification, ownership protection and cancellation behavior.
+- Add **real native packet-replay** tests that reproduce baseline V4.3 `-5`, `-16`, and corrupt-app commit, and verify 10 passing V4.4 cases, including aborts and erase failures. See `docs/V4.4-NATIVE-OTA-AUDIT.md`.
+- New AC791N target-compiled firmware identity `FM-1_2146`, same protected BEETLE boot header, and refreshed SHA-256-pinned SLOOP-HF2-compatible WebInstaller.
+- The audio, 91 shared tonewheels, 12 voices, keyboard handling, effects, KEY ASSIGN LEDs and persistent project layout are **unchanged**. Actual physical cross-flashing, original Felucca release packages and official V15 stock restore still require testing. The BEETLE and NERVE native installed updater sources are **not audited** in this B1 release.
+
+
+
+
 ## Installer HF2 — SLOOP/Felucca source compatibility (no firmware changes)
 
 - Removed the source-identity CONNECT block for SLOOP (`FM-1_900`).
@@ -51,26 +92,6 @@
 - The CHORD ASSIGN display now labels the LED convention `LIT=CHORD   DARK=KEYS`.
 - New hardware-policy regression tests cover 27 physical note LEDs, 14 function LEDs, real CHORD range priority, toggling, saved/loaded assignments, scale-guide priority, pressed keys and legacy project formats.
 - Target-compiled new `FM-1_2142` `.fwsc` and matching hash-pinned WebInstaller; actual FM1 hardware boot, LED scan, audio and OTA operation require user hardware testing. Do NOT infer real hardware functionality from emulation or offline tests.
-
-# Changelog
-
-Version history and technical notes for **SikkenWorks B1**, the drawbar-organ firmware for the M-VAVE FM-1.
-
-This file contains release-specific changes, build validation, performance measurements and outstanding hardware-verification limits. For an overview of the instrument and its controls, see the [README](README.md).
-
----
-
-## V4.4 — October 19, 2026 (Native cross-firmware OTA repair)
-
-- **Fix actual on-device updater, not merely the WebInstaller.** Remove blanket protected-bootheader byte-match `-5` for validated APP_ONLY updates; protect the existing boot sector by never writing it from an APP_ONLY package.
-- **Fix overly strict loader-body rejection `-16` for compatible app-only firmware.** Validate the foreign `ota.bin` container and complete payload CRC; never execute its untrusted loader body. Stage and read back the exact pinned, previously used B1/Felucca app-only loader instead. Continue reporting its real identity `ota-FM-1_015` across reboot.
-- Validate incoming UFW entries for CRC, duplicates, boundary overflow and overlap; check target AC791N chip key 0x980F, XIP 0x02000120, app flash 0x4000 and fully decrypted app.bin slot CRC before any staging erasure.
-- Keep exact-hash-gated official V15 FULL_FLASH as a distinct, non-universal restore route. Retain the mandatory `0xE0000000` / eight-byte `success` handshake, staging verification, ownership protection and cancellation behavior.
-- Add **real native packet-replay** tests that reproduce baseline V4.3 `-5`, `-16`, and corrupt-app commit, and verify 10 passing V4.4 cases, including aborts and erase failures. See `docs/V4.4-NATIVE-OTA-AUDIT.md`.
-- New AC791N target-compiled firmware identity `FM-1_2146`, same protected BEETLE boot header, and refreshed SHA-256-pinned SLOOP-HF2-compatible WebInstaller.
-- The audio, 91 shared tonewheels, 12 voices, keyboard handling, effects, KEY ASSIGN LEDs and persistent project layout are **unchanged**. Actual physical cross-flashing, original Felucca release packages and official V15 stock restore still require testing. The BEETLE and NERVE native installed updater sources are **not audited** in this B1 release.
-
-
 
 
 ## V3.9 — October 18, 2026 (bit-exact DSP efficiency)

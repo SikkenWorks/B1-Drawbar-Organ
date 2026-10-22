@@ -1,0 +1,57 @@
+RUN /opt/pyvenv/bin/python /mnt/data/b1_v46_work/SikkenWorks-B1-V4.6/tests/test_v46_artifacts.py
+PASS: B1 V4.6 exact identity FM-1_2147; OTA byte integrity; SLOOP HF2; 16KiB boot; untouched synth/USB/UI/storage
+FWSC SHA256: 98f6c61778073e1a5c4f10d83742aedc8e038bda87d1365fd74317841828fd39
+RUN node /mnt/data/b1_v46_work/SikkenWorks-B1-V4.6/tests/test_installer_v46.cjs
+PASS: V4.6 HF2 installer syntax, included bytes, SHA256, permanent product ID, Felucca loader support
+RUN /opt/pyvenv/bin/python /mnt/data/b1_v46_work/SikkenWorks-B1-V4.6/tests/run_ota_v46_replay.py cc
+PASS /tmp/b1-ota-replay-_gzkerra/B1_same-family_V4_6.ufw rc=0 reads=2362 special=1 erases=5 writes=17 commits=1 ms=4756 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-_gzkerra/Original_BEETLE_RC1_01.ufw rc=0 reads=2362 special=1 erases=5 writes=17 commits=1 ms=4756 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-_gzkerra/Rollback_to_B1_V4_5_package_SAME_identity_FM-1_2147.ufw rc=0 reads=2362 special=1 erases=5 writes=17 commits=1 ms=4756 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-_gzkerra/Foreign_protected_flash-header_APP_ONLY.ufw rc=0 reads=2362 special=1 erases=5 writes=17 commits=1 ms=4756 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-_gzkerra/Recompiled_compatible_Felucca-family_loader.ufw rc=0 reads=2365 special=1 erases=5 writes=17 commits=1 ms=4745 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-_gzkerra/Larger_compatible_loader_length_and_complete_staging.ufw rc=0 reads=2364 special=1 erases=5 writes=17 commits=1 ms=4744 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-_gzkerra/Corrupt_incoming_loader_rejected_before_erase.ufw rc=-16 reads=2347 special=0 erases=0 writes=0 commits=0 ms=4687 stageId=
+PASS /tmp/b1-ota-replay-_gzkerra/Unknown_loader_tag_rejected_before_erase.ufw rc=-16 reads=2347 special=0 erases=0 writes=0 commits=0 ms=4687 stageId=
+PASS /tmp/b1-ota-replay-_gzkerra/Oversized_loader_rejected_before_erase.ufw rc=-16 reads=2359 special=0 erases=0 writes=0 commits=0 ms=4711 stageId=
+PASS /tmp/b1-ota-replay-_gzkerra/Corrupt_staged_loader_readback_prevents_commit.ufw rc=-18 reads=2361 special=0 erases=10 writes=15 commits=0 ms=4755 stageId=
+PASS /tmp/b1-ota-replay-_gzkerra/Corrupt_XIP_app_rejected.ufw rc=-24 reads=2333 special=0 erases=0 writes=0 commits=0 ms=4659 stageId=
+PASS /tmp/b1-ota-replay-_gzkerra/Wrong_chip_key_rejected.ufw rc=-22 reads=1196 special=0 erases=0 writes=0 commits=0 ms=2386 stageId=
+PASS /tmp/b1-ota-replay-_gzkerra/Missing_success_ACK___cleanup.ufw rc=-13 reads=2365 special=4 erases=10 writes=16 commits=0 ms=4759 stageId=
+PASS /tmp/b1-ota-replay-_gzkerra/User_abort___no_commit.ufw rc=-25 reads=27 special=0 erases=0 writes=0 commits=0 ms=51 stageId=
+PASS /tmp/b1-ota-replay-_gzkerra/Injected_erase_failure___no_commit.ufw rc=-17 reads=2361 special=0 erases=2 writes=0 commits=0 ms=4755 stageId=
+PASS /tmp/b1-ota-replay-_gzkerra/Overlapping_UFW_entries_rejected.ufw rc=-3 reads=2 special=0 erases=0 writes=0 commits=0 ms=2 stageId=
+PASS: B1 V4.6 native OTA packet-level replay. NOT a physical flash test.
+RUN /opt/pyvenv/bin/python /mnt/data/b1_v46_work/SikkenWorks-B1-V4.6/tests/test_v39_pcm_reference.py
+PASS V3.8 -> V3.9: 1,048,576 PCM bytes match 16-mode exact reference SHA-256
+RUN bash /mnt/data/b1_v46_work/SikkenWorks-B1-V4.6/tests/run_v39_quick_tests.sh
+PASS: 1851968 exact signed PCM/gain equivalence cases, all output integers match
+PASS: V3.7 LCD row-damage detection, full refresh, bounded spans
+mode=0 safe=0 golden=4a9a3316fda04e9a
+mode=0 safe=1 golden=1578bbe874e944bb
+mode=1 safe=0 golden=b57ca79e4b4faf03
+mode=1 safe=1 golden=9cc24a21783f8386
+B1 V3.3: full saw, return to organ, V6 project padding, HOME+FX chord: PASS
+relief=0 wave=0 rock=0 FX=0 peak=7338
+relief=0 wave=0 rock=0 FX=1 peak=4927
+relief=0 wave=0 rock=1 FX=0 peak=7095
+relief=0 wave=0 rock=1 FX=1 peak=5569
+relief=0 wave=1 rock=0 FX=0 peak=4796
+relief=0 wave=1 rock=0 FX=1 peak=3867
+relief=0 wave=1 rock=1 FX=0 peak=5904
+relief=0 wave=1 rock=1 FX=1 peak=4361
+relief=1 wave=0 rock=0 FX=0 peak=9070
+relief=1 wave=0 rock=0 FX=1 peak=7184
+relief=1 wave=0 rock=1 FX=0 peak=11263
+relief=1 wave=0 rock=1 FX=1 peak=9362
+relief=1 wave=1 rock=0 FX=0 peak=8280
+relief=1 wave=1 rock=0 FX=1 peak=5590
+relief=1 wave=1 rock=1 FX=0 peak=9653
+relief=1 wave=1 rock=1 FX=1 peak=6753
+B1 V3.3: 16 dense-chord, full-register, full FX combinations PASS
+B1 V3.0: 250000 exact ramp comparisons and signed abs boundaries PASS
+250000 signed reverb/sag comparisons: EXACT
+PASS: mono envelope, all held upper notes, single trigger, lower separation, release
+PASS: safe ROCK responds to GAIN/DRIVE/CABINET, distinct from B3, peak=9389
+PASS: V3.7 -> V3.8 bit-exact single-key B3/SAFE PCM hash=87a297fbf56dda4d
+PASS 2500090 exact Q15 signed-division cases (including INT32_MIN); 3145728 exhaustive softclip LUT interpolations
+PASS: V4.6 OTA/installer/integrity/PCM/native functional regression (hardware not connected).

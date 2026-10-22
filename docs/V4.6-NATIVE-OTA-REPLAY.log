@@ -1,0 +1,17 @@
+PASS /tmp/b1-ota-replay-vsphu2nx/B1_same-family_V4_6.ufw rc=0 reads=2362 special=1 erases=5 writes=17 commits=1 ms=4756 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-vsphu2nx/Original_BEETLE_RC1_01.ufw rc=0 reads=2362 special=1 erases=5 writes=17 commits=1 ms=4756 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-vsphu2nx/Rollback_to_B1_V4_5_package_SAME_identity_FM-1_2147.ufw rc=0 reads=2362 special=1 erases=5 writes=17 commits=1 ms=4756 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-vsphu2nx/Foreign_protected_flash-header_APP_ONLY.ufw rc=0 reads=2362 special=1 erases=5 writes=17 commits=1 ms=4756 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-vsphu2nx/Recompiled_compatible_Felucca-family_loader.ufw rc=0 reads=2365 special=1 erases=5 writes=17 commits=1 ms=4745 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-vsphu2nx/Larger_compatible_loader_length_and_complete_staging.ufw rc=0 reads=2364 special=1 erases=5 writes=17 commits=1 ms=4744 stageId=ota-FM-1_015
+PASS /tmp/b1-ota-replay-vsphu2nx/Corrupt_incoming_loader_rejected_before_erase.ufw rc=-16 reads=2347 special=0 erases=0 writes=0 commits=0 ms=4687 stageId=
+PASS /tmp/b1-ota-replay-vsphu2nx/Unknown_loader_tag_rejected_before_erase.ufw rc=-16 reads=2347 special=0 erases=0 writes=0 commits=0 ms=4687 stageId=
+PASS /tmp/b1-ota-replay-vsphu2nx/Oversized_loader_rejected_before_erase.ufw rc=-16 reads=2359 special=0 erases=0 writes=0 commits=0 ms=4711 stageId=
+PASS /tmp/b1-ota-replay-vsphu2nx/Corrupt_staged_loader_readback_prevents_commit.ufw rc=-18 reads=2361 special=0 erases=10 writes=15 commits=0 ms=4755 stageId=
+PASS /tmp/b1-ota-replay-vsphu2nx/Corrupt_XIP_app_rejected.ufw rc=-24 reads=2333 special=0 erases=0 writes=0 commits=0 ms=4659 stageId=
+PASS /tmp/b1-ota-replay-vsphu2nx/Wrong_chip_key_rejected.ufw rc=-22 reads=1196 special=0 erases=0 writes=0 commits=0 ms=2386 stageId=
+PASS /tmp/b1-ota-replay-vsphu2nx/Missing_success_ACK___cleanup.ufw rc=-13 reads=2365 special=4 erases=10 writes=16 commits=0 ms=4759 stageId=
+PASS /tmp/b1-ota-replay-vsphu2nx/User_abort___no_commit.ufw rc=-25 reads=27 special=0 erases=0 writes=0 commits=0 ms=51 stageId=
+PASS /tmp/b1-ota-replay-vsphu2nx/Injected_erase_failure___no_commit.ufw rc=-17 reads=2361 special=0 erases=2 writes=0 commits=0 ms=4755 stageId=
+PASS /tmp/b1-ota-replay-vsphu2nx/Overlapping_UFW_entries_rejected.ufw rc=-3 reads=2 special=0 erases=0 writes=0 commits=0 ms=2 stageId=
+PASS: B1 V4.6 native OTA packet-level replay. NOT a physical flash test.

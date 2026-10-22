@@ -376,8 +376,14 @@ static int b1_ota_verify_payload(uint32_t off,uint32_t len,uint32_t expected,uin
     return crc==expected?0:-25;
 }
 
-/* BEETLE firmware updates: pin the exact legacy community loader bytes.
- * A separate exact-image-checked official V15 restore route follows below. */
+/* Cross-firmware family validation, B1 V4.6.
+ * The incoming Felucca-family loader is parsed and CRC-checked, but is NOT
+ * executed for the known original family. A different (but compatible)
+ * version-tagged loader can be staged for cross-firmware transitions after
+ * full structural and CRC checks. CRC16 only proves container consistency,
+ * never publisher authenticity: the host (The Firmware Hub) MUST pin the
+ * original package's SHA-256 before offering an update.
+ * Vendor V15 FULL_FLASH continues through its separate strict pathway. */
 #define ETCH_OTA_BODY_LEN 6898u
 #define ETCH_OTA_OWNER (OTA_RES+0x80u)
 /* Exact immutable loader bytes, compiled into the B1 XIP image.  This is
@@ -397,6 +403,39 @@ static int etch_ota_hash(uint32_t off,uint8_t *b,uint8_t from_host){
  }
  return 1;
 }
+/* Validate the complete *incoming* versioned Felucca-family loader BEFORE
+ * modifying any staging flash. V4.4 already verified the UFW entry CRC, but
+ * was missing the loader's own data CRC and family tag check. A one-off SHA
+ * whitelist is NOT used: legitimately recompiled family loaders differ.
+ * Original known loader identity and stock V15 take their existing paths. */
+#define B1_OTA_FELUCCA_MARK_LEN 16u
+#define B1_OTA_LOADER_MAX (OTA_RES-OTA_AREA-32u)
+static int b1_ota_compatible_loader(uint32_t off, uint32_t len,
+                                    uint32_t declared_crc, uint8_t *buf)
+{
+    static const uint8_t tag[B1_OTA_FELUCCA_MARK_LEN] = "FELUCCA-LOADER-1";
+    uint32_t crc = 0, i, n, j;
+    int found = 0;
+    /* Keep the last 256-byte OTA record sector reserved; the valid executable
+     * entry is already checked against AC791N RAM at 0x01c0a800 upstream. */
+    if (len < 128u || len > B1_OTA_LOADER_MAX)
+        return -16;
+    for (i = 0; i < len; i += n) {
+        n = len - i;
+        if (n > 512u) n = 512u;
+        if (ota_read(off + 32u + i, buf, n)) return -16;
+        crc = ota_crc16(buf, n, crc);
+        /* The versioned loader marker lives in its prologue. Restrict it to
+         * the first 512 bytes rather than trusting a trailing decoy string. */
+        if (i == 0u)
+            for (j = 0; j + B1_OTA_FELUCCA_MARK_LEN <= n; ++j)
+                if (ota_memeq(buf + j, tag, B1_OTA_FELUCCA_MARK_LEN))
+                    found = 1;
+        ota_idle();
+    }
+    return found && crc == declared_crc ? 0 : -16;
+}
+
 /* No automatic claim of nonblank unknown bytes in this reserved region.
  * A complete pinned older loader or our ownership token permits a retry. */
 static int etch_ota_available(uint8_t *b){
@@ -425,7 +464,7 @@ static int ota_stage(void)
     static uint8_t mine[512] __attribute__((section(".pool")));
     uint32_t i,n,ota_off,ota_len,fl_off,fl_len,len,c,outer_dcrc;
     int rc;
-    uint8_t official_stock_restore=0;
+    uint8_t official_stock_restore=0, use_family_loader=0;
     ota_show(1,0);
     if((rc=ota_ufw(hdr,&fl_off,&fl_len,&ota_off,&ota_len))!=0)return rc;
     if((rc=b1_ota_verify_payload(fl_off,fl_len,ota_file_crc[0],b))!=0)return rc;
@@ -446,11 +485,17 @@ static int ota_stage(void)
        ota_rd16(b+2)==OTA_LDR_DCRC && etch_ota_stock(fl_off,b)) {
         official_stock_restore=1u;
     } else {
-        /* The pinned B1/Felucca app-only loader performs the actual install.
-         * No foreign loader is staged, even when the incoming package has a
-         * different loader, header, or length. */
+        /* APP_ONLY requires valid chip layout and fully decoded app CRC.
+         * A foreign boot header does not matter because this loader does
+         * not write 0x0000..0x3FFF. */
         if((rc=b1_ota_app_layout(fl_off,b))!=0)return rc;
-        len=ETCH_OTA_BODY_LEN;
+        if((rc=b1_ota_compatible_loader(ota_off,len,outer_dcrc,b))!=0)return rc;
+        /* Keep the original, proven loader for its identical input bytes.
+         * A differently compiled, structurally compatible Felucca loader
+         * is staged from the verified incoming package, as in BEETLE's
+         * cross-firmware path. The Hub is responsible for SHA-256 pinning. */
+        use_family_loader=(len!=ETCH_OTA_BODY_LEN)||!etch_ota_hash(ota_off+32u,b,1);
+        if(!use_family_loader)len=ETCH_OTA_BODY_LEN;
     }
     ota_show(2,0);
     if(!etch_ota_available(b))return -15;
@@ -460,12 +505,14 @@ static int ota_stage(void)
     if(ota_prog(ETCH_OTA_OWNER,etch_ota_owner,16)||
        ota_fread(ETCH_OTA_OWNER,mine,16)||
        !ota_memeq(mine,etch_ota_owner,16))return -10;
-    /* Stage exact trusted B1 loader for APP_ONLY; original audited V15
-     * loader only for exact stock FULL_FLASH. Never stage foreign executable. */
+    /* Stage original trusted B1 loader for known APP_ONLY packages, the
+     * fully validated incoming Felucca-family loader for transitions, or
+     * the exact pinned original V15 loader on the FULL_FLASH restore path.
+     * Never use an unknown loader family or a failed CRC. */
     c=0;
     for(i=0;i<len;i+=n){
         n=len-i;if(n>512u)n=512u;
-        if(official_stock_restore){
+        if(official_stock_restore || use_family_loader){
             if(ota_read(ota_off+32u+i,b,n))return -9;
         }else{
             for(uint32_t j=0;j<n;j++)b[j]=b1_trusted_loader[i+j];
@@ -473,12 +520,18 @@ static int ota_stage(void)
         c=ota_crc16(b,n,c);
         if(ota_prog(OTA_AREA+32u+i,b,n))return -10;
     }
-    for(i=0;i<len;i+=n){
-        n=len-i;if(n>512u)n=512u;
-        if(ota_fread(OTA_AREA+32u+i,b,n))return -11;
-        if(!official_stock_restore && !ota_memeq(b,b1_trusted_loader+i,n))return -18;
+    {
+        uint32_t staged_crc = 0;
+        for(i=0;i<len;i+=n){
+            n=len-i;if(n>512u)n=512u;
+            if(ota_fread(OTA_AREA+32u+i,b,n))return -11;
+            staged_crc=ota_crc16(b,n,staged_crc);
+            if(!official_stock_restore && !use_family_loader && !ota_memeq(b,b1_trusted_loader+i,n))return -18;
+        }
+        /* Not only the transmitted bytes, but the actual staged flash must
+         * match their CRC before writing the commit record. */
+        if(staged_crc!=c || ((official_stock_restore || use_family_loader) && c!=outer_dcrc))return -11;
     }
-    if(official_stock_restore && c!=outer_dcrc)return -11;
     if(ota_stage_head(len))return -12;
     ota_show(4,0);
     for(i=0;i<4u;i++)if(!ota_read(0xE0000000u,b,8) &&

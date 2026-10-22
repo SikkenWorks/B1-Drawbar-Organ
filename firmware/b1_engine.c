@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * SikkenWorks B1 V4.1: full V4.0 organ/rock DSP with exact Smart Idle fast path.
+ * SikkenWorks B1 V4.5: phase-continuous shared-wheel acceleration with Smart Idle.
  * This is original DSP informed by published Hammond service explanations.
  * NOT a sampled Hammond, not a perfect circuit-level model; verify by listening.
  * All work in audio callback is bounded, fixed-point, allocation-free.
@@ -82,6 +82,21 @@ static int32_t shared_wheel_sample(struct b1_engine *e,uint8_t wheel){
  * normal audio path. Tables are generated from the original integer formula;
  * deviations remain small and are verified against golden offline renders.
  * Rare out-of-range signals use exact fallback instead of a hard plateau. */
+/* V4.5: exact shared Hammond percussion bus, with NO 64-bit divide on
+ * the supported DSP range. The historical quotient is trunc(bus*env/260000).
+ * 260000=32*8125 and floor(floor(x/32)/8125)=floor(x/260000).
+ * Split abs(bus) into 5-bit limbs so both multiplications stay in 32 bits:
+ * ((bus/32)*env + ((bus%32)*env)/32)/8125. The historical signed truncation
+ * is restored at the end. Retain a 64-bit fallback for abnormal states. */
+static int32_t b1_percussion_bus_exact(int32_t bus,uint32_t env){
+ uint32_t mag=b1_abs32(bus);
+ if(mag<=2000000u && env<=32767u){
+  uint32_t scaled=(mag>>5)*env+(((mag&31u)*env)>>5);
+  int32_t out=(int32_t)(scaled/8125u);
+  return bus<0?-out:out;
+ }
+ return (int32_t)(((int64_t)bus*env)/260000u);
+}
 /* Interpolated Hammond scanner: integer-delay stepping produced audible zipper\n * noise on vibrato and chorus. Q8 fractional reads are continuous. */
 static int32_t scanner_process(struct b1_engine *e,int32_t dry,int32_t depth_q8){
  uint16_t target=0u;
@@ -624,6 +639,27 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
     e->mixed_wheel_index[e->mixed_wheel_count++]=(uint8_t)w;
   }
  }
+ /* V4.5: A dense-mix wheel list is unique by construction. Align phases
+  * ONCE at the start of the PCM chunk, then increment all selected wheels
+  * by one phase step/sample. This removes the per-wheel cache-stamp check,
+  * elapsed subtraction/compare, and lazy-advance branch in the hottest
+  * 3+ voice sustain case. Preserve every memo field for percussion and
+  * subsequent non-dense blocks. At rare 32-bit clock wrap fall back to
+  * the exact legacy evaluation (its stamp reset advances two ticks). */
+ uint8_t dense_direct=(uint8_t)(fast_mix && frames && e->wheel_frame<=UINT32_MAX-frames);
+ /* When percussion is fully silent throughout a chunk, the sample cache is
+  * never queried again inside that chunk. Publish its time stamps once at
+  * the end; this saves two memory writes per sounding wheel per frame. */
+ uint8_t dense_defer_stamps=(uint8_t)(dense_direct &&
+  (!e->percussion_enabled || !e->percussion_env));
+ if(dense_direct){
+  for(uint32_t j=0;j<e->mixed_wheel_count;j++){
+   uint8_t w=e->mixed_wheel_index[j];
+   uint32_t elapsed=e->wheel_frame-e->wheel_phase_stamp[w];
+   e->wheel_phase[w]+=e->wheel_inc[w]*elapsed;
+   e->wheel_phase_stamp[w]=e->wheel_frame;
+  }
+ }
  /* Registration-aware headroom, BEFORE any clip/amp stages. All drawbar
   * footages plus the full 12-note chord are counted once per DMA block.
   * Prevent the hard square/flat-top that V2.1 produced when summing many
@@ -700,7 +736,14 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    int32_t weighted_sum=0,leak_sum=0;
    for(uint32_t j=0;j<e->mixed_wheel_count;j++){
     uint8_t w=e->mixed_wheel_index[j];
-    int32_t tone=shared_wheel_sample(e,w);
+    int32_t tone;
+    if(dense_direct){
+     e->wheel_phase[w]+=e->wheel_inc[w];
+     if(!dense_defer_stamps)e->wheel_phase_stamp[w]=e->wheel_frame;
+     tone=wheel_sample(e,w);
+     e->wheel_value[w]=tone;
+     if(!dense_defer_stamps)e->wheel_stamp[w]=e->wheel_frame;
+    }else tone=shared_wheel_sample(e,w);
     weighted_sum+=tone*e->mixed_wheel_gain[w];
     leak_sum+=tone*(int32_t)e->mixed_wheel_leak[w];
    }
@@ -762,7 +805,16 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    if(v->age<65535u)++v->age;
    /* The original Hammond key is not velocity-sensitive. Velocity is accepted
     * on MIDI but deliberately does not alter drawbar amplitude. */
-   mix+=(int32_t)(((int64_t)sum*v->envelope)>>15);
+   /* V4.5: This product is bounded by the actual tonewheel design.
+    * Each of the nine draws contributes at most ~2.3k, the maximum key
+    * transient ~10.4k, release click ~2.3k and leakage ~3.4k. The sum
+    * remains below 40k even at the extreme 8-detent, CLICK=255 settings;
+    * envelope <=32767. Signed 32-bit multiply thus reproduces the former
+    * signed 64-bit >>15 result exactly, without 64-bit emulation in the
+    * hottest multi-voice attack/release loop. */
+   if(e->osc_blend_q15==0u || e->osc_blend_q15==32767u)
+    mix+=(sum*(int32_t)v->envelope)>>15;
+   else mix+=(int32_t)(((int64_t)sum*v->envelope)>>15);
   }
   /* V3.8 HAMMOND UPPER PERCUSSION BUS: one non-retriggering envelope is
    * shared by ALL keys physically held on the UPPER manual. Previously only
@@ -779,7 +831,7 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
     percussion_bus+=shared_wheel_sample(e,perc_wheels[j]);
    /* 12 * 32767 * 32767 fits in int64_t and remains bounded, while the
     * existing registration and input guards handle large organ chords. */
-   mix+=(int32_t)(((int64_t)percussion_bus*e->percussion_env)/260000u);
+   mix+=b1_percussion_bus_exact(percussion_bus,e->percussion_env);
    /* Preserve original mono capacitor discharge and no legato retrigger. */
    uint32_t drop=(e->percussion_env+9999u)/10000u;
    e->percussion_env=e->percussion_env>drop?e->percussion_env-drop:0u;
@@ -982,6 +1034,13 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
   int32_t final_l=left,final_r=right;
   out[t*2u]=clamp16(b1_mul_q15(final_l,e->output_gate_q15));
   out[t*2u+1u]=clamp16(b1_mul_q15(final_r,e->output_gate_q15));
+ }
+ if(dense_defer_stamps){
+  for(uint32_t j=0;j<e->mixed_wheel_count;j++){
+   uint8_t w=e->mixed_wheel_index[j];
+   e->wheel_phase_stamp[w]=e->wheel_frame;
+   e->wheel_stamp[w]=e->wheel_frame;
+  }
  }
  if(fast_mix)for(uint32_t j=0;j<B1_VOICES;j++)if(e->voice[j].active){
   uint32_t age=(uint32_t)e->voice[j].age+frames;

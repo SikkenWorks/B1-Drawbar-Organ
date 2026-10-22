@@ -10,7 +10,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parent))
 from fm1_fwsc import (verify_fwsc,parse_ufw,extract_stock_assets,build_flash_image_from_assets,
                       build_fwsc,validate_app_binary)
 SOURCE_SHA='2b79c6bf29fa65adb6f061aae4dfea23e13b4abf3829c96aacaee1abbc1e55de'
-PRODUCT='FM-1_2146'
+PRODUCT='FM-1_2147'
 
 def sha(data):return hashlib.sha256(data).hexdigest()
 
