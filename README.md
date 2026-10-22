@@ -1,6 +1,8 @@
 <div align="center">
 
 <img src="B1.gif" alt="B1 drawbar organ on the M-VAVE FM-1" width="240">
+<br>
+<img src="SikkenWorks-B1" alt="B1 drawbar organ on the M-VAVE FM-1" width="240">
 
 # B1
 
