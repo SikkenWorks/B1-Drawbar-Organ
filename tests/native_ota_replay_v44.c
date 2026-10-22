@@ -81,7 +81,7 @@ int main(int argc,char **argv){
       ota_rd32(stage+8)!=oln||memcmp(stage+32,package+olo+32,oln-32u))boot_ok=0;
  }
  int known_loader_ok=(variant_expected || !memcmp(stage+32,b1_trusted_loader,ETCH_OTA_BODY_LEN));
- int ok=(pass?(rc==0&&commits==1&&special_requests>=1 && erases==5u && writes>=2u && known_loader_ok && !memcmp(committed+8,"ota-FM-1_015",12)):
+ int ok=(pass?(rc==0&&commits==1&&special_requests>=1 && erases==5u && writes>=2u && known_loader_ok && !memcmp(committed+8,variant_expected?"ota-FM-1_900":"ota-FM-1_015",12)):
               (rc!=0&&commits==0&&(!prereject||(erases==0&&writes==0&&special_requests==0))))&&boot_ok;
  printf("%s %s rc=%d reads=%u special=%u erases=%u writes=%u commits=%u ms=%u stageId=%.*s\n",
    ok?"PASS":"FAIL",argv[1],rc,reads,special_requests,erases,writes,commits,ms,12,committed+8);

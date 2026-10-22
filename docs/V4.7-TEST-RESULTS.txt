@@ -1,0 +1,4 @@
+PASS package SHA, fixed identity, USB MIDI product, installer embedded firmware
+PASS 96 exact PCM + entire DSP state signatures (1–12 voices, 8 settings)
+PASS 16 native CHECK/stage/success/rollback OTA packet replays
+PASS all V4.7 software checks (FM1 physical boot/CPU/DMA remain untested)

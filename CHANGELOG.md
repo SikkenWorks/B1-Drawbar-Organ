@@ -1,5 +1,17 @@
 # Changelog
 
+## V4.7 — Hub handoff and lossless polyphony efficiency (2026-10-22)
+
+- Preserve package and application SysEx identity `FM-1_2147`; NO new product ID.
+- Correct USB descriptor strings: SikkenWorks manufacturer, standard `FM-1` USB product/port (previous B1 code incorrectly advertised ETCH). VID/PID and MIDI class unchanged.
+- Fix transition metadata: stage known pinned app-only loader with `ota-FM-1_015`; for structurally checked alternate FELUCCA-family loader use `ota-FM-1_900` (matching the chosen staging family). Do not identify the running B1 as the loader.
+- Optimize polyphonic note-on/release: precompute active voice indices, audible drawbars and per-contact stagger offsets per PCM sub-block. Exactly same voice behaviour and 91 tonewheel sound.
+- Confirm byte-identical PCM AND entire DSP state vs V4.6 across 96 baseline configurations including 1–12 voices, B3/ROCK, ORGAN/SAW, percussion and effects.
+- Offline native OTA replay covers input validation, loader staging/readback, `success` confirmation, rejection before flash erase, timeout and rollback/abort. A successful actual Firmware Hub cross-firmware transition has NOT yet been established on physical FM1.
+- BEETLE label in The Firmware Hub is assigned by its identity catalogue. A real identity collision for `FM-1_2147` cannot be solved without updating the Hub listing, because this project deliberately keeps its existing ID.
+- Any remaining crackling on hardware requires measured AUDIO DIAG overruns and PCM capture; offline PCM equality does not prove on-device DMA deadlines.
+
+
 Version history and technical notes for **SikkenWorks B1**, the drawbar-organ firmware for the M-VAVE FM-1.
 
 This file contains release-specific changes, build validation, performance measurements and outstanding hardware-verification limits. For an overview of the instrument and its controls, see the [README](README.md).

@@ -394,6 +394,7 @@ static int b1_ota_verify_payload(uint32_t off,uint32_t len,uint32_t expected,uin
 static const uint8_t etch_ota_owner[16]="BEETLE-OTA-STAGE";
 static const uint8_t etch_ota_old_owner[16]="ETCH-OTA-STAGE-1";
 static uint8_t ota_touched;
+static uint8_t b1_staged_foreign_loader;
 static int etch_ota_hash(uint32_t off,uint8_t *b,uint8_t from_host){
  for(uint32_t i=0;i<ETCH_OTA_BODY_LEN;){
   uint32_t n=ETCH_OTA_BODY_LEN-i;if(n>512u)n=512u;
@@ -466,6 +467,7 @@ static int ota_stage(void)
     int rc;
     uint8_t official_stock_restore=0, use_family_loader=0;
     ota_show(1,0);
+    b1_staged_foreign_loader=0u;
     if((rc=ota_ufw(hdr,&fl_off,&fl_len,&ota_off,&ota_len))!=0)return rc;
     if((rc=b1_ota_verify_payload(fl_off,fl_len,ota_file_crc[0],b))!=0)return rc;
     if((rc=b1_ota_verify_payload(ota_off,ota_len,ota_file_crc[1],b))!=0)return rc;
@@ -496,6 +498,7 @@ static int ota_stage(void)
          * cross-firmware path. The Hub is responsible for SHA-256 pinning. */
         use_family_loader=(len!=ETCH_OTA_BODY_LEN)||!etch_ota_hash(ota_off+32u,b,1);
         if(!use_family_loader)len=ETCH_OTA_BODY_LEN;
+        b1_staged_foreign_loader=use_family_loader;
     }
     ota_show(2,0);
     if(!etch_ota_available(b))return -15;
@@ -567,8 +570,11 @@ static int ota_session(void)
     ota_wr16(parm + 2, 0x5A0Du);
     ota_wr16(parm + 4, 0x5A01u);
     ota_wr16(parm + 6, 0x5441u);
-    for (i = 0; i < 12u; i++)
-        parm[8 + i] = (uint8_t)"ota-FM-1_015"[i];    /* the loader's own USB identity */
+    {
+        const char *loader_id = b1_staged_foreign_loader ? "ota-FM-1_900" : "ota-FM-1_015";
+        for (i = 0; loader_id[i] && i < 27u; i++)
+            parm[8u + i] = (uint8_t)loader_id[i];
+    } /* loader identity, NEVER replace the running B1 package ID */
     ota_wr32(parm + 72, OTA_AREA);
     ota_wr16(parm, ota_crc16(parm + 2, 78, 0));
 #if FELUCCA_OTA_DRYRUN

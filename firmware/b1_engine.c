@@ -660,6 +660,32 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    e->wheel_phase_stamp[w]=e->wheel_frame;
   }
  }
+ /* V4.7: Prepare the *exact* non-dense contact path once per DMA block.
+  * The old 44.1kHz loop scanned all twelve slots and nine drawbars per
+  * sample. Active slots, audible busbars and click-delay offsets cannot
+  * change within a render call. No DSP approximation or new voice limit.
+  * Release changes v->active in place, so the inner loop still checks it. */
+ uint8_t voiced_idx[B1_VOICES], voiced_count=0u;
+ uint8_t voice_bar_count[B1_VOICES];
+ uint8_t voice_bar_index[B1_VOICES][B1_HARMONICS];
+ uint8_t contact_delay[B1_VOICES][B1_HARMONICS];
+ if(!fast_mix){
+  uint32_t click_curve=((uint32_t)e->click*e->click+50u)/100u;
+  for(uint32_t v=0u;v<B1_VOICES;v++)if(e->voice[v].active){
+   const struct b1_voice *voice=&e->voice[v];
+   uint8_t k=voiced_count++;
+   voiced_idx[k]=(uint8_t)v;
+   uint8_t count=0u;
+   for(uint32_t h=0;h<B1_HARMONICS;h++){
+    if(e->drawbars[voice->bank][h] && !(voice->bank==0u && h==8u && e->percussion_enabled)){
+     voice_bar_index[k][count++]=(uint8_t)h;
+     uint32_t spread=(h*7u+(uint32_t)(voice->note%5u))%25u;
+     contact_delay[k][h]=(uint8_t)((spread*click_curve+50u)/100u);
+    }
+   }
+   voice_bar_count[k]=count;
+  }
+ }
  /* Registration-aware headroom, BEFORE any clip/amp stages. All drawbar
   * footages plus the full 12-note chord are counted once per DMA block.
   * Prevent the hard square/flat-top that V2.1 produced when summing many
@@ -751,15 +777,15 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    if(e->leakage)mix+=leak_sum*(int32_t)e->leakage/2700;
    sounding_now=1u;
    /* Age changes only for voice stealing once per chunk, not per sample. */
-  }else for(uint32_t j=0;j<B1_VOICES;j++){
-   struct b1_voice *v=&e->voice[j];if(!v->active)continue;
+  }else for(uint32_t vi=0;vi<voiced_count;vi++){
+   struct b1_voice *v=&e->voice[voiced_idx[vi]];if(!v->active)continue;
    if(v->releasing){if(v->envelope>256u)v->envelope-=256u;else{v->active=0u;continue;}}
    else if(v->envelope<32767u){uint32_t next=(uint32_t)v->envelope+1024u;v->envelope=(uint16_t)(next>32767u?32767u:next);}
    sounding_now=1u;
    int32_t sum=0;
-   for(uint32_t h=0;h<9;h++){
-    uint8_t pos=e->drawbars[v->bank][h];if(!pos)continue;
-    if(v->bank==0u && h==8u && e->percussion_enabled)continue; /* B3 1' drawbar disconnect */
+   for(uint32_t hi=0;hi<voice_bar_count[vi];hi++){
+    uint32_t h=voice_bar_index[vi][hi];
+    /* drawbar level comes from the unchanged smoothed Q16 term below */
     uint8_t wheel=v->wheel[h];
     int32_t tone=shared_wheel_sample(e,wheel);
     /* Contact staggering: each of nine busbars closes on its own sample. */
@@ -776,9 +802,7 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
     if(v->age<38u){
      int32_t contact=(int32_t)v->age;
      if(e->click){
-      uint32_t spread=((h*7u+v->note%5u)%25u);
-      uint32_t curve=((uint32_t)e->click*(uint32_t)e->click+50u)/100u;
-      contact-=(int32_t)((spread*curve+50u)/100u);
+      contact-=(int32_t)contact_delay[vi][h];
      }
      if(contact<=0)continue;
      if(contact<12)tone=tone*contact/12;

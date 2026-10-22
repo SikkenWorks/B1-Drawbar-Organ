@@ -1,0 +1,100 @@
+RUN /opt/pyvenv/bin/python /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/build.py
+CC b1_main.c
+In file included from /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/b1_main.c:10:
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/hal/fm1_sys.h:94:13: warning: unused function 'fm1_wdt_stop' [-Wunused-function]
+static void fm1_wdt_stop(void) { fm1_p33_write(FM1_P3_WDT_CON, 0); }
+            ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/hal/fm1_sys.h:110:13: warning: unused function 'fm1_reboot' [-Wunused-function]
+static void fm1_reboot(void)
+            ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/hal/fm1_sys.h:168:12: warning: unused function 'fm1_mem_readable' [-Wunused-function]
+static int fm1_mem_readable(uint32_t a, uint32_t n)
+           ^
+In file included from /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/b1_main.c:11:
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/hal/fm1_irq.h:83:13: warning: unused function 'fm1_irq_mask' [-Wunused-function]
+static void fm1_irq_mask(uint32_t n) { FM1_ICFG(n) &= ~(1u << ((n & 7u) * 4u)); }
+            ^
+In file included from /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/b1_main.c:12:
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/hal/fm1_guard.h:90:13: warning: unused function 'fm1_guard_lock_top' [-Wunused-function]
+static void fm1_guard_lock_top(void)
+            ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/hal/fm1_guard.h:101:13: warning: unused function 'fm1_guard_unlock_top' [-Wunused-function]
+static void fm1_guard_unlock_top(void)
+            ^
+In file included from /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/b1_main.c:13:
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/hal/fm1_input.h:340:13: warning: unused function 'fm1_input_scan' [-Wunused-function]
+static void fm1_input_scan(void)
+            ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/hal/fm1_input.h:427:13: warning: unused function 'fm1_led_dim_level' [-Wunused-function]
+static void fm1_led_dim_level(uint32_t lo)
+            ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/hal/fm1_input.h:498:13: warning: unused function 'fm1_led_anim_start' [-Wunused-function]
+static void fm1_led_anim_start(uint32_t glow)
+            ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/hal/fm1_input.h:513:12: warning: unused function 'fm1_led_anim_on' [-Wunused-function]
+static int fm1_led_anim_on(void) { return fm1__an_f != 0u; }
+           ^
+In file included from /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/b1_main.c:22:
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/hal/fm1_flash.h:236:13: warning: unused function 'fl_plain_window_init' [-Wunused-function]
+static void fl_plain_window_init(void)
+            ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/hal/fm1_flash.h:250:12: warning: unused function 'fl_erase4k' [-Wunused-function]
+static int fl_erase4k(uint32_t off, uint32_t *took_us)
+           ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/hal/fm1_flash.h:258:12: warning: unused function 'fl_write' [-Wunused-function]
+static int fl_write(uint32_t off, const uint8_t *src_ram, uint32_t n)
+           ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/hal/fm1_flash.h:276:12: warning: unused function 'fl_verify_xip' [-Wunused-function]
+static int fl_verify_xip(uint32_t off, const uint8_t *ref, uint32_t n)
+           ^
+In file included from /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/b1_main.c:33:
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/libc.c:31:12: warning: unused function 'str_eq' [-Wunused-function]
+static int str_eq(const char *a, const char *b)
+           ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/libc.c:40:17: warning: unused function 'str_len' [-Wunused-function]
+static unsigned str_len(const char *s)
+                ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/libc.c:48:13: warning: unused function 'str_cpy' [-Wunused-function]
+static void str_cpy(char *d, const char *s, unsigned max)
+            ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/libc.c:77:13: warning: unused function 'fmt_int' [-Wunused-function]
+static void fmt_int(char *b, int32_t v) { fmt_fix(b, v, 0); }
+            ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/libc.c:80:17: warning: unused function 'rng' [-Wunused-function]
+static uint32_t rng(void)
+                ^
+In file included from /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/b1_main.c:34:
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/lcd.c:90:13: warning: unused function 'lcd_blit' [-Wunused-function]
+static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *px)
+            ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/lcd.c:138:13: warning: unused function 'lcd_power' [-Wunused-function]
+static void lcd_power(uint32_t s)
+            ^
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/lcd.c:151:13: warning: unused function 'lcd_wake_now' [-Wunused-function]
+static void lcd_wake_now(void)
+            ^
+In file included from /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/b1_main.c:42:
+/mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/firmware/usb.c:189:12: warning: unused function 'midi_out_event' [-Wunused-function]
+static int midi_out_event(uint32_t pkt)             /* from the audio ISR; 0 = ring full/disconnected */
+           ^
+23 warnings generated.
+CC b1_startup.c
+CC b1_engine.c
+CC b1_performance.c
+CC b1_storage.c
+CC b1_ui.c
+CC native_digest.c
+CC crt0.S
+CC hal/fm1_vec.S
+CC hal/fm1_isr.S
+Built /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/build/B1.elf
+RUN /opt/pyvenv/bin/python /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/tools/fm1_elf_to_app.py /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/build/B1.elf /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/build/B1-app.bin --toolchain /mnt/data/b1_tc/jieli-linux-toolchains-20250324.1
+wrote /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/build/B1-app.bin: 85824 B, headroom 495740 B
+ OK _start=0x02000120
+RUN /opt/pyvenv/bin/python /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/tools/b1_pack_beetle_ota.py --reference /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/build/BEETLE-RC1.01-RESTORE-ORIGINAL.fwsc --app /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/build/B1-app.bin --out /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/build/SikkenWorks-B1-V4.7-BEETLE-OTA.fwsc
+Candidate: /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/build/SikkenWorks-B1-V4.7-BEETLE-OTA.fwsc identity FM-1_2147 bytes 610086 sha256 a07ca7b6cb67ff2412bff6a60c1789450bd10e9240b7c2aee3f1201dc2729650
+Boot header SHA-256: d9f43191777656de01c7bed4f9e9ba2e34e94832c5d2ed02c3fc7ab7a6d9bd67 byte-identical to supplied BEETLE reference
+WARNING: Tested offline only. Hardware boot/OTA/rollback not proven.
+RUN /opt/pyvenv/bin/python /mnt/data/b1_v47_work/SikkenWorks-B1-V4.7/tools/build_installer_v47.py
+PASS: V4.7 WebInstaller; product still FM-1_2147; SHA256 a07ca7b6cb67ff2412bff6a60c1789450bd10e9240b7c2aee3f1201dc2729650
+B1 V4.7 native build complete: ID FM-1_2147 PRESERVED
