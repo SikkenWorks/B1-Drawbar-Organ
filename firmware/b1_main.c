@@ -1,4 +1,4 @@
-/* SikkenWorks B1 V4.7 (Cross-firmware native OTA and lossless polyphony; V4.5 DSP + Smart Idle + KEY ASSIGN intact). GPL-3.0-only, custom FM1 executable.
+/* SikkenWorks B1 V4.9 (Cross-firmware native OTA and lossless polyphony; V4.5 DSP + Smart Idle + KEY ASSIGN intact). GPL-3.0-only, custom FM1 executable.
  * Felucca platform HAL © Leo Kuroshita / Hügelton Instruments.
  * FLASH POLICY: OTA staging plus B1-owned, dynamically selected verified-safe two-sector journal.
  * BEETLE project data at 0x97000..0xDFFFF is never modified.
@@ -36,9 +36,9 @@
 #define FELUCCA_OTA 1
 #define FELUCCA_OTA_DRYRUN 0
 #define FELUCCA_UAC 0
-#define FELUCCA_ID "FM-1_2147"
+#define FELUCCA_ID "FM-1_481026"
 #define RING_PUBLISH() __asm__ volatile("" ::: "memory")
-#define HALF_FRAMES 128u
+#define HALF_FRAMES 256u
 #include "usb.c"
 
 extern uint32_t _bss_start[],_bss_end[],_pool_start[],_pool_end[];
@@ -55,9 +55,16 @@ static uint8_t chord_cursor,chord_quality,project_new_armed,name_cursor;
 static char edit_name[B1_PROJECT_NAME_MAX+1u];
 static int8_t project_error;
 static uint8_t project_io_busy;
-static uint8_t project_notice; /* 1=SAVE OK 2=LOAD OK, temporary */
+static uint8_t project_notice; /* 1=SAVE OK 2=LOAD OK 3=AUTO SAVED, temporary */
 static uint32_t project_notice_until;
 static volatile uint8_t save_requested;
+/* Live autosave never touches the 12 named projects and never writes in an ISR.
+ * Debounced and wear-throttled, deferred until the instrument is silent. */
+#define B1_AUTO_DEBOUNCE_MS 5000u
+#define B1_AUTO_MIN_INTERVAL_MS 60000u
+static uint8_t b1_auto_pending;
+static uint32_t b1_auto_last_edit_ms,b1_auto_last_attempt_ms;
+static uint8_t b1_auto_attempted;
 /* 1=load saved slot, 2=new blank project. Execution is deferred until AFTER
  * the short UI interrupt-off section, so zeroing the 56KB engine and applying
  * a saved project never blocks ALNK0 DMA or the USB clock interrupt. */
@@ -73,12 +80,17 @@ static volatile uint8_t b1_audio_diag,b1_test_tone,b1_force_safe;
 static uint8_t b1_safe_latched;
 static uint16_t b1_good_dma_blocks;
 static uint32_t b1_probe_phase;
-/* 128 frames at 44.1 kHz = 2.90ms, timer4 ticks at 24MHz.
- * 48k ticks (~2ms) is an early-warning threshold with margin for DMA.
+/* V4.8: 256 frames at 44.1 kHz = 5.805ms, timer4 at 24MHz.
+ * 110k ticks (~4.58ms) warns before the 132k (~5.5ms) hard budget.
  * Once a real missed deadline occurs, keep the low-cost path latched for
  * this boot. Repeated full-path reactivation would create glitch loops. */
-#define B1_DMA_SOFT_BUDGET_TICKS 48000u
-#define B1_DMA_HARD_BUDGET_TICKS 69632u
+#define B1_DMA_SOFT_BUDGET_TICKS 110000u
+#define B1_DMA_HARD_BUDGET_TICKS 132000u
+/* A missed half must never be replaced by an abrupt all-zero PCM step.
+ * This bounded fade-out/fade-in does NOT cure missed deadlines, but prevents
+ * a single timing miss becoming a full-amplitude discontinuity. No heap. */
+static volatile uint8_t b1_dma_resume_ramp;
+static int32_t b1_dma_last_l,b1_dma_last_r;
 static volatile uint8_t output_ready;
 static uint8_t safe_mode;
 static uint16_t fade;
@@ -168,10 +180,18 @@ void fm1_alnk0_irq(void){
      * silence. Otherwise leave the DMA-owned half untouched. Audio resumes
      * with the next safe callback; no stale PCM is deliberately reissued. */
     b1_overrun=1u;++b1_audio_overruns;++b1_dma_deadlines;
-    b1_safe_latched=1u;b1_audio.cpu_relief=1u;
+    b1_safe_latched=1u;b1_audio.cpu_relief=1u;b1_dma_resume_ramp=1u;
     if(fm1_audio_half_owned(half)){
      int32_t *silence=&b1_dma[half*HALF_FRAMES*2u];
-     for(uint32_t i=0;i<HALF_FRAMES*2u;i++)silence[i]=0;
+     for(uint32_t t=0;t<HALF_FRAMES;t++){
+      uint32_t fade=HALF_FRAMES-1u-t;
+      /* Widen BEFORE multiplication. The current PCM24 packing is well
+       * inside 32-bit bounds, but this keeps the emergency ramp safe even
+       * if a future output stage uses the full signed 24-bit DAC range. */
+      silence[t*2u]=(int32_t)(((int64_t)b1_dma_last_l*(int64_t)fade)/(int64_t)HALF_FRAMES);
+      silence[t*2u+1u]=(int32_t)(((int64_t)b1_dma_last_r*(int64_t)fade)/(int64_t)HALF_FRAMES);
+     }
+     b1_dma_last_l=0;b1_dma_last_r=0;
     }
     if(cost>b1_audio_peak_ticks)b1_audio_peak_ticks=cost;
     b1_isr_active=0;return;
@@ -185,7 +205,7 @@ void fm1_alnk0_irq(void){
     * silently accepting a partially completed write. */
    if(!fm1_audio_half_owned(half)){
     b1_overrun=1u;++b1_audio_overruns;++b1_dma_deadlines;
-    b1_safe_latched=1u;b1_audio.cpu_relief=1u;
+    b1_safe_latched=1u;b1_audio.cpu_relief=1u;b1_dma_resume_ramp=1u;
     if(cost>b1_audio_peak_ticks)b1_audio_peak_ticks=cost;
     b1_isr_active=0;return;
    }
@@ -201,12 +221,24 @@ void fm1_alnk0_irq(void){
      * every signed PCM value at edge gains + randomized combinations. */
     y=b1_master_gain_exact((int16_t)y,b1_master_smoothed);
     if(fade<4096u){y=(y*(int32_t)fade)/4096; if((i&1u)&&fade<4096u)++fade;}
+    /* Resume crossfade after an underrun: 64 stereo frames = 1.45ms.
+     * The calculation is done in signed 32 bits with bounded 16-bit PCM. */
+    if(b1_dma_resume_ramp){
+     uint32_t t=i>>1;
+     if(t<64u){
+      int32_t previous=((i&1u)?b1_dma_last_r:b1_dma_last_l)/128;
+      y=(previous*(int32_t)(64u-t)+y*(int32_t)t)/64;
+     }
+    }
     dst[i]=y*128;
    }
+   if(b1_dma_resume_ramp)b1_dma_resume_ramp=0u;
+   b1_dma_last_l=dst[(HALF_FRAMES-1u)*2u];
+   b1_dma_last_r=dst[(HALF_FRAMES-1u)*2u+1u];
    __asm__ volatile("csync" ::: "memory");
    if(!fm1_audio_half_owned(half)){
     b1_overrun=1u;++b1_audio_overruns;++b1_dma_deadlines;
-    b1_safe_latched=1u;b1_audio.cpu_relief=1u;
+    b1_safe_latched=1u;b1_audio.cpu_relief=1u;b1_dma_resume_ramp=1u;
    }
    uint32_t elapsed=(uint32_t)(fm1_ticks()-start);
    if(elapsed>b1_audio_peak_ticks)b1_audio_peak_ticks=elapsed;
@@ -327,6 +359,45 @@ static void b1_resume_after_write(void){
  while((int32_t)(b1_ms-until)<0){fm1_wdt_feed();usb_retry(b1_ms);}
  fm1_audio_output_enable(1u);output_ready=1u;project_io_busy=0u;
 }
+static void b1_autosave_touch(void){
+ b1_auto_pending=1u;b1_auto_last_edit_ms=b1_ms;
+}
+/* Flash programming uses XIP and may stall audio. Only write after every
+ * voice and effect tail has completely finished, and NEVER during OTA. */
+static uint8_t b1_autosave_quiet(void){
+ if(safe_mode||b1_updating||usb.ota_req||usb.uboot_req||project_io_busy||save_requested||
+    b1_project_transition_requested||!b1_audio_active||b1_keys.pressed||fm1_in.notes||
+    b1_audio.percussion_env||b1_audio.fx_tail_samples||b1_audio.fx_was_audible)return 0u;
+ for(uint32_t i=0;i<B1_VOICES;i++)if(b1_audio.voice[i].active)return 0u;
+ return 1u;
+}
+static void b1_autosave_service(void){
+ uint32_t now=b1_ms;
+ if(!b1_auto_pending || (uint32_t)(now-b1_auto_last_edit_ms)<B1_AUTO_DEBOUNCE_MS ||
+    (b1_auto_attempted && (uint32_t)(now-b1_auto_last_attempt_ms)<B1_AUTO_MIN_INTERVAL_MS) ||
+    (b1_saved.state!=B1_STORAGE_READY&&b1_saved.state!=B1_STORAGE_EMPTY) ||
+    !b1_autosave_quiet())return;
+ /* Stop DMA before capturing a coherent snapshot, as with manual saves. */
+ b1_stop_for_write();
+ b1_pending_save=b1_saved.archive;
+ b1_project_capture(&b1_pending_save.live,&b1_keys,&b1_audio);
+ b1_pending_save.live_valid=1u;
+ /* Comparing every byte avoids unnecessary wear even after navigation. */
+ uint8_t identical=b1_saved.archive.live_valid;
+ if(identical){
+  const uint8_t *a=(const uint8_t*)&b1_saved.archive.live,*b=(const uint8_t*)&b1_pending_save.live;
+  for(uint32_t i=0;i<sizeof(struct b1_project);i++)if(a[i]!=b[i]){identical=0u;break;}
+ }
+ int rc=0;
+ if(!identical)rc=b1_storage_commit(&b1_saved,&b1_flash_io,&b1_pending_save);
+ b1_auto_last_attempt_ms=now;b1_auto_attempted=1u;
+ if(!rc){
+  b1_auto_pending=0u;
+  if(!identical){project_notice=3u;project_notice_until=now+1600u;b1_ui_dirty=1u;}
+ }
+ b1_resume_after_write();
+ if(rc){project_error=(int8_t)(rc<-100?-100:rc);b1_ui_dirty=1u;}
+}
 static const char b1_name_chars[]=" ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.";
 static void b1_name_edit_begin(void){
  if(b1_saved.archive.mask&(1u<<project_cursor)){
@@ -358,10 +429,13 @@ static void b1_save_named(void){
  b1_project_capture(&b1_pending_save.projects[project_cursor],&b1_keys,&b1_audio);
  for(unsigned i=0;i<=B1_PROJECT_NAME_MAX;i++)b1_pending_save.names[project_cursor][i]=edit_name[i];
  b1_pending_save.mask|=(1u<<project_cursor);
+ /* An explicit manual save also snapshots the current live sound. */
+ b1_pending_save.live=b1_pending_save.projects[project_cursor];
+ b1_pending_save.live_valid=1u;
  int rc=b1_storage_commit(&b1_saved,&b1_flash_io,&b1_pending_save);
  b1_resume_after_write();
  if(rc){project_error=(int8_t)(rc<-100?-100:rc);return;}
- project_error=0;dirty_project=0u;ui_page=4u;
+ project_error=0;dirty_project=0u;ui_page=4u;b1_auto_pending=0u;b1_auto_last_attempt_ms=b1_ms;b1_auto_attempted=1u;
  project_notice=1u;project_notice_until=b1_ms+1600u;
 }
 static uint8_t bounded_add(uint8_t n,int32_t delta,uint8_t low,uint8_t high){
@@ -408,6 +482,7 @@ static void b1_execute_project_transition(void){
  mi_r=mi_w;midi_in_overflow=0u;
  b1_audio_active=1u;
  fm1_irq_enable_all();
+ b1_autosave_touch();
  b1_ui_dirty=1u;
 }
 static void b1_controls(uint32_t pressed){
@@ -577,7 +652,7 @@ static void b1_controls(uint32_t pressed){
    if(enc[3]){b1_keys.guide=enc[3]>0;changed=1;dirty_project=1;}
   }
  }
- if(changed)b1_ui_dirty=1;
+ if(changed){b1_ui_dirty=1u;if(dirty_project)b1_autosave_touch();}
 }
 void fm1_cstart(void){
  fm1_audio_output_enable(0u);
@@ -600,6 +675,12 @@ void fm1_cstart(void){
   /* Never erase flash at boot. A fully occupied private journal region
    * can be reclaimed ONLY with explicit two-step on-device confirmation. */
   (void)b1_storage_open(&b1_saved,&b1_flash_io);
+  /* Restore live parameters once, before audio DMA starts; never load
+   * saved voice/note runtime state. REC recovery deliberately skips this. */
+  if(b1_saved.archive.live_valid &&
+     b1_project_apply(&b1_saved.archive.live,&b1_keys,&b1_audio)){
+   chord_quality=b1_keys.chord_map[chord_cursor];
+  }
   if(b1_saved.state==B1_STORAGE_LOCKED && b1_saved.active_bank<0)ui_page=8u;
  }
  if(safe_mode)b1_screen(); /* Direct safe UI, never animate over recovery. */
@@ -690,7 +771,7 @@ void fm1_cstart(void){
      if(!b1_chord_enabled(&b1_keys)){
       project_error=0; /* With ASSIGN OFF, keep the normal keyboard playable. */
      }else if(b1_assign_chord_key(&b1_keys,k,chord_quality)){
-      chord_cursor=k;dirty_project=1u;project_error=0;
+      chord_cursor=k;dirty_project=1u;project_error=0;b1_autosave_touch();
      }else project_error=-14;
      b1_ui_dirty=1u;
     }
@@ -717,6 +798,7 @@ void fm1_cstart(void){
    }else b1_save_named();
    b1_ui_dirty=1u;
   }
+  b1_autosave_service();
   /* Bound LCD transfers to 20Hz, coalescing rapid encoder events.
    * Audio DMA and USB take priority over visual feedback. The pending flag
    * is not cleared until the frame has actually been submitted. */

@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#define FELUCCA_ID "FM-1_2147"
+#define FELUCCA_ID "FM-1_481026"
 #define FELUCCA_OTA_DRYRUN 0
 #include "ota.c"
 static uint8_t *package;static uint32_t package_len;

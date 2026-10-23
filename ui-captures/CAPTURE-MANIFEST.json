@@ -288,7 +288,7 @@
   },
   {
     "name": "12k-audio-diagnostic",
-    "raw_sha256": "f7fd43698294d8057402705ae994b6f1bbaa0f742ef57ff2ad93c5e9d54e088a",
+    "raw_sha256": "c6ac29557c930013265b2d7fac298cfb1a97834fc90ed56b33bead7d57352259",
     "png": "12k-audio-diagnostic.png",
     "pixels": "240x240",
     "origin": "firmware/b1_ui.c"

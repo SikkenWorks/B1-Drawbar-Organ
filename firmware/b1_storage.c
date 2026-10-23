@@ -4,6 +4,7 @@
  * The four-byte COMMIT is programmed LAST. Unknown flash is never erased.
  */
 #include "b1_storage.h"
+#include <stddef.h>
 #define HDR_MAGIC 0u
 #define HDR_SCHEMA 4u
 #define HDR_GEN 8u
@@ -40,6 +41,7 @@ void b1_storage_default_name(uint8_t slot,char name[B1_PROJECT_NAME_MAX+1u]){
 }
 static int archive_valid(const struct b1_project_archive *a){
  if(a->mask & ~((1u<<B1_PROJECT_SLOTS)-1u))return 0;
+ if(a->live_valid>1u || (a->live_valid && !b1_project_valid(&a->live)))return 0;
  for(unsigned i=0;i<B1_PROJECT_SLOTS;i++)if(a->mask&(1u<<i)){
   if(!b1_storage_name_valid(a->names[i]))return 0;
   /* validate the embedded project's own checksum via its public helper. */
@@ -119,6 +121,13 @@ static int probe_at(const struct b1_storage_io *io,uint32_t at,struct probe *q,
   if(io->read(io->ctx,at+B1_STORAGE_DATA_OFFSET,b1_old_bytes,len))return -1;
   if(b1_storage_crc(b1_old_bytes,len)!=get32(header+HDR_CRC)||
      !upgrade_v5(&b1_probe_workspace,b1_old_bytes))return 0;
+ }else if(schema==2u && len==offsetof(struct b1_project_archive,live)){
+  /* V4.8 schema-2 archive is an exact prefix. Read only its original
+   * bytes; initialize the new live snapshot as absent. CRC is over the
+   * ORIGINAL stored length, preserving migration without reformatting. */
+  zero((uint8_t*)&b1_probe_workspace,sizeof(b1_probe_workspace));
+  if(io->read(io->ctx,at+B1_STORAGE_DATA_OFFSET,(uint8_t*)&b1_probe_workspace,len))return -1;
+  if(b1_storage_crc(&b1_probe_workspace,len)!=get32(header+HDR_CRC)||!archive_valid(&b1_probe_workspace))return 0;
  }else if(schema==B1_STORAGE_SCHEMA && len==sizeof(struct b1_project_archive)){
   if(io->read(io->ctx,at+B1_STORAGE_DATA_OFFSET,(uint8_t*)&b1_probe_workspace,sizeof(b1_probe_workspace)))return -1;
   if(b1_storage_crc(&b1_probe_workspace,sizeof(b1_probe_workspace))!=get32(header+HDR_CRC)||!archive_valid(&b1_probe_workspace))return 0;

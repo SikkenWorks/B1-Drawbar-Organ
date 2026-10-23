@@ -67,7 +67,7 @@ static struct {
 /* USB audio input. The I2S clock is not locked to USB (about 44,117.6 Hz against the host's 44,100):
  * the endpoint is asynchronous, so each 1 ms packet carries what the ring holds, 44 or 45 frames
  * (the 44.1 pattern) and one more or one fewer while the ring's fill drifts out of its band.
- * The render writes HALF_FRAMES (128) frames every 2.9 ms; the fill measured when a render starts is
+ * The render writes HALF_FRAMES (256) frames every 5.8 ms; the fill measured when a render starts is
  * the low point of that saw tooth, and is kept in UA_LO..UA_HI. A frame waits in the ring for that fill
  * plus its place in the render: 80..256 frames, ~3.8 ms on average (256-frame halves and a 96..160
  * band: ~5.8 ms). Measured under load (65 % CPU): a 64..112 band started renders at

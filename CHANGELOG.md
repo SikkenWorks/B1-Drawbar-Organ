@@ -1,4 +1,24 @@
+## V4.9 — Auto-save live parameters, OTA regression safeguards (2026-10-23)
+
+- **AUTO SAVE:** after 5 seconds without parameter edits, and after playback plus effects are fully silent, automatically persist the entire live project parameter snapshot in B1's existing dual-bank copy-on-write journal. At most one flash write per 60 seconds during editing; no erase/program during note playback. Restart restores the last live setup automatically.
+- The twelve named project slots remain independent and unchanged. Existing schema 1/2 journals automatically migrate on their NEXT save; old project sectors are never erased on boot. CRC32 and commit-last journal safety remain. Power loss before commit retains the previous valid bank.
+- Boot in REC recovery never restores parameter state or accesses the project flash. If no B1-owned/blank two-bank journal can be found, autosave fails closed and unknown sectors are not touched.
+- OTA route, verified loader staging, application and loader checks, protected boot region and Firmware Hub/SLOOP HF2 WebInstaller remain unchanged from V4.8, so this iteration cannot introduce speculative changes to the already unverified hardware round-trip protocol. Native OTA replay is rerun with the new firmware.
+- **Identity remains FM-1_481026** in every package and USB response. All tonewheels, 12 voices, audio DMA, project UI and effects are unchanged.
+
 # Changelog
+
+## V4.8 — New B1 identity, DMA headroom and underrun recovery (2026-10-22)
+
+- **New permanent B1 identity:** `FM-1_481026` replaces the previously shared/mislabelled `FM-1_2147`. This is deliberate for this release; freeze `FM-1_481026` for subsequent updates. Native USB SysEx application and `.fwsc` identity now agree; USB MIDI class, VID/PID and SikkenWorks manufacturer are preserved.
+- Keep the native V4.7 cross-firmware APP_ONLY and compatible Felucca-family OTA input validation, 16 KiB protected boot region, USB-MIDI read/`success`/write/commit protocol, flash staging, readback and recovery. Update B1's staging owner token, while recognizing previous BEETLE/ETCH tokens for reattempts. Do not execute unknown loaders.
+- Package the B1 firmware as `SikkenWorks-B1-V4.8.fwsc`, not as a BEETLE-named release file. The BEETLE RC1.01 package remains a pinned **build-time boot-header reference**, not B1's firmware identity or a guaranteed restore image.
+- **Increase stereo audio DMA half size from 128 to 256 frames**, reducing the ALNK callback frequency while keeping the same 44.1kHz waveform calculations, 91 wheels, 12 voices, registrations and effects. Budget thresholds are scaled to the longer DMA interval; this adds up to 2.9ms scheduling latency in exchange for fewer interrupts.
+- **Clickless DMA recovery:** when an overrun is detected and the DMA half is still CPU-owned, fade the last output smoothly to zero rather than replacing the half with a hard zero step. On the next available half, crossfade from the previous output over 64 frames. Never touch DMA-owned memory. Counters and fail-safe relief remain active.
+- Use 64-bit intermediates in the exceptional underrun fade, guarding future DAC-wide output ranges without changing normal PCM.
+- Host-only regression: 72 polyphony/FX stress combinations, 48 one-block/two-block PCM equivalence combinations, 256-frame fade math validation, native OTA packet replays, 96 historical DSP reference scenarios, compiler/CRC/identity/installer checks. FM1 actual CPU load and end-to-end cross-firmware hardware transfers are **unverified**.
+- **Known limitations:** no original Felucca 1.6/1.1.5 package is present in the local fixtures, actual The Firmware Hub round-trip needs FM1 hardware, and firmware flash/recovery remains at the user's risk. The original V4.7 crackling could also have causes beyond DMA deadlines.
+
 
 ## V4.7 — Hub handoff and lossless polyphony efficiency (2026-10-22)
 

@@ -19,7 +19,7 @@
 #define B1_STORAGE_B 0x000E9000u
 #define B1_STORAGE_MAGIC 0x364A3142u /* B1J6 */
 #define B1_STORAGE_COMMIT 0x5A19B116u
-#define B1_STORAGE_SCHEMA 2u
+#define B1_STORAGE_SCHEMA 3u /* V4.9: append live autosave without changing 12 existing slots */
 #define B1_STORAGE_DATA_OFFSET 256u
 #define B1_STORAGE_UNMOUNTED 0u
 #define B1_STORAGE_READY 1u
@@ -30,6 +30,10 @@ struct b1_project_archive {
  uint32_t mask;
  char names[B1_PROJECT_SLOTS][B1_PROJECT_NAME_MAX+1u];
  struct b1_project projects[B1_PROJECT_SLOTS];
+ /* V4.9: live startup scene, independent of the twelve NAMED slots.
+  * Schema-2 data ends at offsetof(live); no existing slot is moved. */
+ struct b1_project live;
+ uint32_t live_valid;
 };
 struct b1_storage {
  struct b1_project_archive archive;

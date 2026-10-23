@@ -298,6 +298,7 @@ void b1_ui_render(uint16_t *frame,const struct b1_ui_state *s){
     field_num("SAVE ERROR",(int)s->project_error,165,PINK);
   else if(s->project_notice==1u)text("PROJECT SAVED",14,174,1,AMBER);
   else if(s->project_notice==2u)text("PROJECT LOADED",14,174,1,AMBER);
+  else if(s->project_notice==3u)text("AUTO SAVED",14,174,1,AMBER);
   else text(s->dirty_project?"UNSAVED CHANGES":"READY",14,177,0,AMBER);
   text(s->project_new_armed?"REC AGAIN: NEW":"REC: NEW PROJECT",14,194,0,s->project_new_armed?PINK:MUTED);
   foot("SAVE: NAME / WRITE","SEL: LOAD");

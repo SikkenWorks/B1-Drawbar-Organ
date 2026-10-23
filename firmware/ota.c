@@ -391,8 +391,9 @@ static int b1_ota_verify_payload(uint32_t off,uint32_t len,uint32_t expected,uin
  * that manifested as OTA -16 on real B1 hardware.  External firmware with
  * a different loader must use the independent UBOOT / vendor updater path. */
 #include "b1_pinned_loader.h"
-static const uint8_t etch_ota_owner[16]="BEETLE-OTA-STAGE";
+static const uint8_t etch_ota_owner[16]="B1-OTA-STAGE-V4";
 static const uint8_t etch_ota_old_owner[16]="ETCH-OTA-STAGE-1";
+static const uint8_t b1_legacy_beetle_owner[16]="BEETLE-OTA-STAGE";
 static uint8_t ota_touched;
 static uint8_t b1_staged_foreign_loader;
 static int etch_ota_hash(uint32_t off,uint8_t *b,uint8_t from_host){
@@ -442,7 +443,7 @@ static int b1_ota_compatible_loader(uint32_t off, uint32_t len,
 static int etch_ota_available(uint8_t *b){
  uint8_t head[32];
  if(ota_fread(ETCH_OTA_OWNER,b,16))return 0;
- if(ota_memeq(b,etch_ota_owner,16)||ota_memeq(b,etch_ota_old_owner,16))return 1;
+ if(ota_memeq(b,etch_ota_owner,16)||ota_memeq(b,etch_ota_old_owner,16)||ota_memeq(b,b1_legacy_beetle_owner,16))return 1;
  if(ota_fread(OTA_AREA,head,32))return 0;
  if(ota_rd16(head)==ota_crc16(head+2,30,0)&&ota_rd32(head+4)==OTA_AREA&&ota_rd32(head+8)==ETCH_OTA_BODY_LEN+32&&ota_memeq(head+16,(const uint8_t*)"LOADER.BIN",10)&&etch_ota_hash(OTA_AREA+32,b,0))return 1;
  for(uint32_t i=0;i<OTA_AREA_LEN;i+=512){if(ota_fread(OTA_AREA+i,b,512))return 0;for(uint32_t j=0;j<512;j++)if(b[j]!=255)return 0;ota_idle();}

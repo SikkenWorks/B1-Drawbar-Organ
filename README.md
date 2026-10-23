@@ -1,8 +1,6 @@
 <div align="center">
 
 <img src="B1.gif" alt="B1 drawbar organ on the M-VAVE FM-1" width="240">
-<br>
-<img src="SikkenWorks-B1.png" alt="B1 drawbar organ on the M-VAVE FM-1" width="240">
 
 # B1
 
@@ -154,16 +152,30 @@ B1 stores **12 named projects** in persistent memory. A project holds the comple
 
 To **load** a project, open the project loader, choose a slot with **K1** or **SELECT**, then press **SEL**. A successful operation shows `PROJECT LOADED` on screen. Saving uses the project's save function and confirms with `PROJECT SAVED`.
 
+### Automatic parameter saving (V4.9)
+
+B1 also automatically remembers the **last live sound** separately from your twelve named projects. This includes all drawbars, three registrations, ranges and chord assignments, scale, organ/SAW engine, Leslie, percussion, amp, delay and reverb settings. The last autosaved sound is restored when B1 boots normally, without recalling a named project.
+
+Autosave waits for **5 seconds after the last control edit** and for all voices and FX tails to become fully silent. Flash writes are rate-limited to **one attempt per minute** during ongoing editing to limit flash wear. No flash is written while keys are held, effects are ringing, OTA is active, or the FM1 is in REC recovery. `AUTO SAVED` briefly appears on the project page when the new snapshot is committed. Continue to use named projects for deliberate, separately stored patches.
+
+Autosave shares B1's existing CRC-protected two-sector project journal, and uses **no new or unverified flash sectors**. If those two safe sectors are unavailable, B1 will not auto-save rather than overwrite another firmware's data. Do not switch power off immediately after editing: a pending save cannot complete until the instrument becomes silent. Older B1 project journals are read and migrated automatically on the next valid save.
+
 Existing saved projects keep their stored settings. New or reset projects start in ORGAN, with **percussion ON (3rd harmonic)**, **rotor FAST** and **ROTOR MIX 60**. Legacy project files without an engine-mode flag select ORGAN automatically.
+
+### Firmware identity and switching
+
+B1 identifies itself as `FM-1_481026` on USB-MIDI and in its `.fwsc` package. This is B1's own identity and should remain unchanged in later B1 releases. It is not the BEETLE identity and is separate from the temporary OTA-loader identity used during a firmware update.
+
+When switching to other compatible FM1 software, use a reputable Firmware Hub or WebInstaller with SHA-256 pinned source packages. A compatible loader and valid package are required; no firmware can guarantee recovery from every foreign or interrupted flash. Back up your projects and have an independent recovery path.
 
 ## Installation
 
-The firmware is intended for the **M-VAVE FM-1**. **A valid offline-built `.fwsc` is included, but hardware boot, sound and OTA updating still require an actual FM1 test.** The repository contains a freshly compiled update package and a browser-based installer. Rebuild both together with `JIELI_TOOLCHAIN=/path/to/jieli-linux-toolchains-20250324.1 python3 tools/build_v38_release.py`.
+The firmware is intended for the **M-VAVE FM-1**. **A valid offline-built `.fwsc` is included, but hardware boot, sound and OTA updating still require an actual FM1 test.** The repository contains a freshly compiled update package and a browser-based installer. Rebuild both together with `JIELI_TOOLCHAIN=/path/to/jieli-linux-toolchains-20250324.1 python3 tools/build_v49_release.py`.
 
 | File / directory | Purpose |
 | :-- | :-- |
 | `B1-WebInstaller.html` | WebMIDI-based installer for a supported browser and compatible device |
-| `build/SikkenWorks-B1-V4.4-BEETLE-OTA.fwsc` | B1 V4.4 firmware update candidate (`FM-1_2146`), built with the pi32v2 compiler |
+| `build/SikkenWorks-B1-V4.9.fwsc` | B1 V4.9 native firmware (`FM-1_481026`), built with the pi32v2 compiler |
 | `build/BEETLE-RC1.01-RESTORE-ORIGINAL.fwsc` | Original BEETLE reference package, included for recovery planning |
 | `build/B1.elf` and `build/B1-app.bin` | Actual native pi32v2 linked ELF and flattened application image
 | `firmware/` | Full C firmware source and platform integration |
@@ -194,4 +206,3 @@ B1 is released under **GPL-3.0-only**. The included Inter font is subject to its
 </div>
 
 
-**Firmware package identity policy:** The native application, USB-MIDI identification and `.fwsc` product marker remain `FM-1_2147` for V4.6 and future revisions unless the owner explicitly changes this requirement. Do not derive product IDs from release labels.
