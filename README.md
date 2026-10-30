@@ -170,7 +170,7 @@ When switching to other compatible FM1 software, use a reputable Firmware Hub or
 
 ## Installation
 
-The firmware is intended for the **M-VAVE FM-1**. **A valid offline-built `.fwsc` is included, but hardware boot, sound and OTA updating still require an actual FM1 test.** The repository contains a freshly compiled update package and a browser-based installer. Rebuild both together with `JIELI_TOOLCHAIN=/path/to/jieli-linux-toolchains-20250324.1 python3 tools/build_v49_release.py`.
+The firmware is intended for the **M-VAVE FM-1** and **B1 has been installed and tested on real FM-1 hardware**, including booting and sound output. The repository contains a native-built `.fwsc` update package and a browser-based installer. Rebuild both together with `JIELI_TOOLCHAIN=/path/to/jieli-linux-toolchains-20250324.1 python3 tools/build_v49_release.py`. Cross-firmware OTA switching and recovery have not been verified for every third-party firmware.
 
 | File / directory | Purpose |
 | :-- | :-- |
@@ -185,7 +185,7 @@ The firmware is intended for the **M-VAVE FM-1**. **A valid offline-built `.fwsc
 
 Use **Chrome or Edge with WebMIDI** and follow the WebInstaller's device and firmware checks. The installer can validate compatible FM-1 `.fwsc` files that match B1's protected BEETLE boot-header and loader requirements. For a different firmware layout, **ENTER UBOOT** requests a handoff to the FM-1's independent update environment; the target firmware must then be installed with its own compatible installer. Neither path is a universal flasher.
 
-**Before installing:** back up your projects and keep an independent, tested recovery method. Firmware V4.4 has passed native compilation, offline packaging and software tests, **not** a successful flash, boot or rollback on a physical FM-1. The earlier on-device `OTA FAILED -16` report has not been proven resolved by physical testing. Do not keep retrying a failed update, bypass the loader checks, or assume the included BEETLE reference is a universal recovery image.
+**Before installing:** back up your projects and keep an independent, tested recovery method. **B1 has been tested on a physical M-VAVE FM-1**, including firmware installation, startup and audio playback. This does **not** mean that switching to every other FM1 firmware, or recovering from an interrupted update, has been proven on hardware. Do not keep retrying a failed update, bypass the loader checks, or assume the included BEETLE reference is a universal recovery image.
 
 ## Credits
 
