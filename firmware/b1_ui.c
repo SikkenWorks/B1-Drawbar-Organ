@@ -287,21 +287,28 @@ void b1_ui_render(uint16_t *frame,const struct b1_ui_state *s){
   top("PROJECT MENU","12 SLOTS");
   field_num("K1  SLOT",s->project_cursor+1,82,AMBER);
   if(s->project_mask&(1u<<s->project_cursor)){
-   text("PROJECT NAME",14,121,0,MUTED);
-   text(s->project_names[s->project_cursor],14,141,1,WHITE);
-  }else text("EMPTY SLOT",14,135,1,MUTED);
+   text("PROJECT NAME",14,112,0,MUTED);
+   text(s->project_names[s->project_cursor],14,127,1,WHITE);
+  }else text("EMPTY SLOT",14,127,1,MUTED);
+  /* K4 encoder changes the persistent ON/OFF preference; show it in SAVE. */
+  text("K4 AUTO SAVE",14,158,0,MUTED);
+  right_text(s->autosave_enabled?"ON":"OFF",224,154,1,s->autosave_enabled?AMBER:WHITE);
   if(s->project_storage_state==B1_STORAGE_LOCKED)
-    text("STORAGE LOCKED",14,174,0,PINK);
+    text("STORAGE LOCKED",14,182,0,PINK);
   else if(s->project_storage_state==B1_STORAGE_ERROR)
-    text("FLASH READ ERROR",14,174,0,PINK);
-  else if(s->project_error)
-    field_num("SAVE ERROR",(int)s->project_error,165,PINK);
-  else if(s->project_notice==1u)text("PROJECT SAVED",14,174,1,AMBER);
-  else if(s->project_notice==2u)text("PROJECT LOADED",14,174,1,AMBER);
-  else if(s->project_notice==3u)text("AUTO SAVED",14,174,1,AMBER);
-  else text(s->dirty_project?"UNSAVED CHANGES":"READY",14,177,0,AMBER);
-  text(s->project_new_armed?"REC AGAIN: NEW":"REC: NEW PROJECT",14,194,0,s->project_new_armed?PINK:MUTED);
-  foot("SAVE: NAME / WRITE","SEL: LOAD");
+    text("FLASH READ ERROR",14,182,0,PINK);
+  else if(s->project_error){
+    text("SAVE ERROR",14,183,0,PINK);
+    val_number((int)s->project_error,224,183,0,PINK);
+  }
+  else if(s->autosave_pending)text("SETTING PENDING",14,183,0,AMBER);
+  else if(s->project_notice==1u)text("PROJECT SAVED",14,183,0,AMBER);
+  else if(s->project_notice==2u)text("PROJECT LOADED",14,183,0,AMBER);
+  else if(s->project_notice==3u)text("AUTO SAVED",14,183,0,AMBER);
+  else if(s->project_notice==4u)text("AUTO SAVE OFF",14,183,0,AMBER);
+  else text(s->dirty_project?"UNSAVED CHANGES":"READY",14,183,0,AMBER);
+  text(s->project_new_armed?"REC AGAIN: NEW":"REC: NEW PROJECT",14,202,0,s->project_new_armed?PINK:MUTED);
+  foot("SAVE: NAME","SEL: LOAD");
  }else if(s->page==7u){
   top("SAVE PROJECT","NAME EDIT");
   field_num("K1  SLOT",s->project_cursor+1,80,AMBER);

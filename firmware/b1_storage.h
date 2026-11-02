@@ -21,6 +21,10 @@
 #define B1_STORAGE_COMMIT 0x5A19B116u
 #define B1_STORAGE_SCHEMA 3u /* V4.9: append live autosave without changing 12 existing slots */
 #define B1_STORAGE_DATA_OFFSET 256u
+/* V5.3: 32-byte journal header had bytes 28..31 reserved in all older
+ * versions. Store a strict, self-identifying ON token there. Legacy FF/unknown
+ * values are OFF; the 12 projects and schema-3 archive stay byte-identical. */
+#define B1_STORAGE_AUTOSAVE_ON 0xA5073AD5u
 #define B1_STORAGE_UNMOUNTED 0u
 #define B1_STORAGE_READY 1u
 #define B1_STORAGE_EMPTY 2u
@@ -40,6 +44,7 @@ struct b1_storage {
  uint32_t generation;
  int8_t active_bank;
  uint8_t state;
+ uint8_t autosave_enabled; /* persistent flag from validated journal header; default OFF */
  uint32_t sector[2]; /* Actual verified pair (not fixed E8000/E9000). */
 };
 /* The callback implementation is kept independent of hardware for power-cut

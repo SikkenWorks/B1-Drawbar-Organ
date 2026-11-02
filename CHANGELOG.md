@@ -1,3 +1,12 @@
+## V5.3 — Optional AUTO SAVE in the SAVE menu (2026-11-02)
+
+- **AUTO SAVE defaults to OFF** on new installations and for existing V5.2/V4.9 journals. Old live snapshots are not silently restored while OFF.
+- **SAVE / PROJECT MENU, K4:** clockwise ON, counterclockwise OFF. Display ON/OFF plus SETTING PENDING during deferred persistence.
+- Store the preference in the previously reserved four bytes of the existing CRC-validated, copy-on-write journal header (offset 28); old schema-3 project archive, twelve slots and older journal compatibility remain unchanged. Only the recognized `0xA5073AD5` token enables automatic saving; legacy and unknown tokens mean OFF.
+- Defer preference and scene flash writes until 5 seconds without edits and all voices/effect tails silent. The existing once-per-minute wear throttle still applies to ordinary scene autosaves. On preference change, the debounce and silence check remain mandatory; the old validated bank survives interrupted writes.
+- Manual named-project SAVE/LOAD still works with AUTO SAVE OFF. No new flash sectors, no OTA or audio engine changes, and no overwrite of foreign flash.
+- Fixed B1 package/USB identity `FM-1_481026` preserved. No claim of physical headroom or cross-firmware hardware verification added.
+
 ## V5.2 — Lossless Leslie/ROCK optimization (2026-11-02)
 
 - Reuse the same four Leslie sine lookups for Doppler delay and stereo amplitude modulation in the FULL DSP route; no change to phase or output samples.

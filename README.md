@@ -34,9 +34,9 @@ B1 has two sound engines: the original **SINE / ORGAN** tonewheels and an experi
 
 ## Audio stability and diagnostics
 
-B1 uses 91 shared, phase-continuous tonewheels and up to 12 software voices. It evaluates only the wheels needed for the sounding notes, reuses common wheel samples and combines shared harmonics on steady chords. **V5.2** retains the V5.1 SAFE/ORGAN acceleration and reuses Leslie lookup values while adding exact bounded ROCK arithmetic. V5.1 accelerated the settled SAFE/ORGAN mixer and its transient wheel prefetch using exact sine-table lookups; sound and DSP state match V5.0 bit-for-bit in native host regression tests. A linked input/output peak guard maintains digital headroom without applying a permanent compressor to every normal sample. All original organ and effect controls remain available.
+B1 uses 91 shared, phase-continuous tonewheels and up to 12 software voices. It evaluates only the wheels needed for the sounding notes, reuses common wheel samples and combines shared harmonics on steady chords. **V5.3** retains the V5.2 Leslie/ROCK optimizations and adds a persistent AUTO SAVE switch in the SAVE menu. **V5.2** retains the V5.1 SAFE/ORGAN acceleration and reuses Leslie lookup values while adding exact bounded ROCK arithmetic. V5.1 accelerated the settled SAFE/ORGAN mixer and its transient wheel prefetch using exact sine-table lookups; sound and DSP state match V5.0 bit-for-bit in native host regression tests. A linked input/output peak guard maintains digital headroom without applying a permanent compressor to every normal sample. All original organ and effect controls remain available.
 
-For hardware timing diagnostics, open **SCL / SCALE** and press **SELECT** for **AUDIO DIAG**. Play repeated 3-, 6- and 12-note chords, and read **PEAK** (worst render time in microseconds) and **DMA MISSES** (missed buffer deadlines). Each 256-frame half-buffer has about **5,805 microseconds** at 44.1 kHz; the firmware's safety limit is 5,500 microseconds. If misses increase during chords, it is a realtime deadline problem, not necessarily digital clipping. An actual FM1 is required to establish the hardware result. B1 has been tested on physical FM1 hardware in earlier releases; the **V5.2** worst-case 12-voice timing and safe headroom are not yet hardware-certified. In a 12-voice test, aim for **zero DMA MISSES** and keep PEAK comfortably below the 5,500 µs hard deadline (ideally below 4,100 µs for roughly 25% margin).
+For hardware timing diagnostics, open **SCL / SCALE** and press **SELECT** for **AUDIO DIAG**. Play repeated 3-, 6- and 12-note chords, and read **PEAK** (worst render time in microseconds) and **DMA MISSES** (missed buffer deadlines). Each 256-frame half-buffer has about **5,805 microseconds** at 44.1 kHz; the firmware's safety limit is 5,500 microseconds. If misses increase during chords, it is a realtime deadline problem, not necessarily digital clipping. An actual FM1 is required to establish the hardware result. B1 has been tested on physical FM1 hardware in earlier releases; the **V5.3** worst-case 12-voice timing and safe headroom are not yet hardware-certified. In a 12-voice test, aim for **zero DMA MISSES** and keep PEAK comfortably below the 5,500 µs hard deadline (ideally below 4,100 µs for roughly 25% margin).
 
 ## How to use it
 
@@ -147,6 +147,11 @@ Delay and reverb can continue to ring out briefly after you release the keys. Wi
 
 ## Projects
 
+**AUTO SAVE is OFF by default.** Open **SAVE / PROJECT MENU**, then turn **K4 right for ON** or **K4 left for OFF**. The SAVE screen displays the selected setting. When ON, B1 saves live parameters after 5 seconds without changes and only after all notes/effect tails stop; background writes are wear-throttled. When OFF, B1 does not autosave changes or automatically reload the old live snapshot at power-on. Your twelve named project slots and manual SAVE/LOAD always remain available.
+
+The ON/OFF preference is kept in the existing two-bank journal header, without changing the on-disk project format. The choice is written after 5 seconds of inactivity and a completely silent audio engine; until then SAVE displays **SETTING PENDING**. If power is disconnected before the preference finishes saving, the last committed choice applies at the next boot.
+
+
 B1 stores **12 named projects** in persistent memory. A project holds the complete organ setup, including:
 
 - All nine drawbars for UPPER, LOWER and SOLO.
@@ -160,7 +165,7 @@ To **load** a project, open the project loader, choose a slot with **K1** or **S
 
 ### Automatic parameter saving (V4.9)
 
-B1 also automatically remembers the **last live sound** separately from your twelve named projects. This includes all drawbars, three registrations, ranges and chord assignments, scale, organ/SAW engine, Leslie, percussion, amp, delay and reverb settings. The last autosaved sound is restored when B1 boots normally, without recalling a named project.
+With **AUTO SAVE ON**, B1 automatically remembers the **last live sound** separately from your twelve named projects. This includes all drawbars, three registrations, ranges and chord assignments, scale, organ/SAW engine, Leslie, percussion, amp, delay and reverb settings. The last autosaved sound is restored when B1 boots normally **only when AUTO SAVE is ON**; with AUTO SAVE OFF, startup uses its normal default scene until you manually load a project.
 
 Autosave waits for **5 seconds after the last control edit** and for all voices and FX tails to become fully silent. Flash writes are rate-limited to **one attempt per minute** during ongoing editing to limit flash wear. No flash is written while keys are held, effects are ringing, OTA is active, or the FM1 is in REC recovery. `AUTO SAVED` briefly appears on the project page when the new snapshot is committed. Continue to use named projects for deliberate, separately stored patches.
 

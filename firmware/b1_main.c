@@ -1,4 +1,4 @@
-/* SikkenWorks B1 V5.2 (native OTA, lossless polyphony, autosave and KEY ASSIGN preserved). GPL-3.0-only, custom FM1 executable.
+/* SikkenWorks B1 V5.3 (native OTA, lossless polyphony, autosave and KEY ASSIGN preserved). GPL-3.0-only, custom FM1 executable.
  * Felucca platform HAL © Leo Kuroshita / Hügelton Instruments.
  * FLASH POLICY: OTA staging plus B1-owned, dynamically selected verified-safe two-sector journal.
  * BEETLE project data at 0x97000..0xDFFFF is never modified.
@@ -63,7 +63,7 @@ static volatile uint8_t save_requested;
  * Debounced and wear-throttled, deferred until the instrument is silent. */
 #define B1_AUTO_DEBOUNCE_MS 5000u
 #define B1_AUTO_MIN_INTERVAL_MS 60000u
-static uint8_t b1_auto_pending;
+static uint8_t b1_auto_pending,b1_auto_config_pending;
 static uint32_t b1_auto_last_edit_ms,b1_auto_last_attempt_ms;
 static uint8_t b1_auto_attempted;
 /* 1=load saved slot, 2=new blank project. Execution is deferred until AFTER
@@ -280,6 +280,7 @@ static void b1_screen(void){
   .project_storage_state=b1_saved.state,.project_error=project_error,
   .name_cursor=name_cursor,.edit_name=edit_name,.dirty_project=dirty_project,
   .reclaim_armed=reclaim_armed,
+  .autosave_enabled=b1_saved.autosave_enabled,.autosave_pending=b1_auto_config_pending,
   .project_notice=(uint8_t)((int32_t)(project_notice_until-b1_ms)>0?project_notice:0u)
  };
  b1_ui_render(b1_frame,&ui);
@@ -361,7 +362,21 @@ static void b1_resume_after_write(void){
  fm1_audio_output_enable(1u);output_ready=1u;project_io_busy=0u;
 }
 static void b1_autosave_touch(void){
+ /* Turning AUTO off must not queue a background write for parameter changes. */
+ if(!b1_saved.autosave_enabled)return;
  b1_auto_pending=1u;b1_auto_last_edit_ms=b1_ms;
+}
+static void b1_autosave_set(uint8_t enabled){
+ enabled=(uint8_t)!!enabled;
+ if(enabled==b1_saved.autosave_enabled)return;
+ b1_saved.autosave_enabled=enabled;
+ b1_auto_config_pending=1u;
+ b1_auto_pending=enabled;
+ b1_auto_last_edit_ms=b1_ms;
+ project_error=0;
+ /* Persist once after five seconds of no edits and complete audio silence.
+  * The new setting is already effective in RAM even before the flash commit. */
+ b1_ui_dirty=1u;
 }
 /* Flash programming uses XIP and may stall audio. Only write after every
  * voice and effect tail has completely finished, and NEVER during OTA. */
@@ -374,27 +389,34 @@ static uint8_t b1_autosave_quiet(void){
 }
 static void b1_autosave_service(void){
  uint32_t now=b1_ms;
- if(!b1_auto_pending || (uint32_t)(now-b1_auto_last_edit_ms)<B1_AUTO_DEBOUNCE_MS ||
-    (b1_auto_attempted && (uint32_t)(now-b1_auto_last_attempt_ms)<B1_AUTO_MIN_INTERVAL_MS) ||
+ if(!b1_auto_config_pending && !(b1_saved.autosave_enabled && b1_auto_pending))return;
+ if((uint32_t)(now-b1_auto_last_edit_ms)<B1_AUTO_DEBOUNCE_MS ||
+    /* Setting changes may be saved once the instrument is quiet, even if the
+     * last scene autosave happened recently. Five-second debounce limits wear. */
+    (!b1_auto_config_pending && b1_auto_attempted &&
+     (uint32_t)(now-b1_auto_last_attempt_ms)<B1_AUTO_MIN_INTERVAL_MS) ||
     (b1_saved.state!=B1_STORAGE_READY&&b1_saved.state!=B1_STORAGE_EMPTY) ||
     !b1_autosave_quiet())return;
- /* Stop DMA before capturing a coherent snapshot, as with manual saves. */
+ /* No flash operation ever occurs inside DMA/ISR or with active notes/tails. */
  b1_stop_for_write();
  b1_pending_save=b1_saved.archive;
- b1_project_capture(&b1_pending_save.live,&b1_keys,&b1_audio);
- b1_pending_save.live_valid=1u;
- /* Comparing every byte avoids unnecessary wear even after navigation. */
- uint8_t identical=b1_saved.archive.live_valid;
- if(identical){
-  const uint8_t *a=(const uint8_t*)&b1_saved.archive.live,*b=(const uint8_t*)&b1_pending_save.live;
-  for(uint32_t i=0;i<sizeof(struct b1_project);i++)if(a[i]!=b[i]){identical=0u;break;}
+ uint8_t save_scene=(uint8_t)(b1_saved.autosave_enabled && b1_auto_pending);
+ uint8_t identical=(uint8_t)!b1_auto_config_pending;
+ if(save_scene){
+  b1_project_capture(&b1_pending_save.live,&b1_keys,&b1_audio);
+  b1_pending_save.live_valid=1u;
+  if(!b1_saved.archive.live_valid)identical=0u;
+  if(identical){
+   const uint8_t *a=(const uint8_t*)&b1_saved.archive.live,*b=(const uint8_t*)&b1_pending_save.live;
+   for(uint32_t i=0;i<sizeof(struct b1_project);i++)if(a[i]!=b[i]){identical=0u;break;}
+  }
  }
  int rc=0;
  if(!identical)rc=b1_storage_commit(&b1_saved,&b1_flash_io,&b1_pending_save);
  b1_auto_last_attempt_ms=now;b1_auto_attempted=1u;
  if(!rc){
-  b1_auto_pending=0u;
-  if(!identical){project_notice=3u;project_notice_until=now+1600u;b1_ui_dirty=1u;}
+  b1_auto_pending=0u;b1_auto_config_pending=0u;
+  if(!identical){project_notice=save_scene?3u:4u;project_notice_until=now+1600u;b1_ui_dirty=1u;}
  }
  b1_resume_after_write();
  if(rc){project_error=(int8_t)(rc<-100?-100:rc);b1_ui_dirty=1u;}
@@ -436,7 +458,7 @@ static void b1_save_named(void){
  int rc=b1_storage_commit(&b1_saved,&b1_flash_io,&b1_pending_save);
  b1_resume_after_write();
  if(rc){project_error=(int8_t)(rc<-100?-100:rc);return;}
- project_error=0;dirty_project=0u;ui_page=4u;b1_auto_pending=0u;b1_auto_last_attempt_ms=b1_ms;b1_auto_attempted=1u;
+ project_error=0;dirty_project=0u;ui_page=4u;b1_auto_pending=0u;b1_auto_config_pending=0u;b1_auto_last_attempt_ms=b1_ms;b1_auto_attempted=1u;
  project_notice=1u;project_notice_until=b1_ms+1600u;
 }
 static uint8_t bounded_add(uint8_t n,int32_t delta,uint8_t low,uint8_t high){
@@ -622,6 +644,8 @@ static void b1_controls(uint32_t pressed){
   if(alg){r->bank=bounded_add(r->bank,alg,0,B1_BANKS-1);changed=1;dirty_project=1;}
  }else if(ui_page==4){
   if(enc[0]||sel){project_cursor=bounded_add(project_cursor,enc[0]+sel,0,B1_PROJECT_SLOTS-1);changed=1;}
+  /* SAVE menu K4: rotate right = ON, left = OFF, independent of slot. */
+  if(enc[3]){b1_autosave_set((uint8_t)(enc[3]>0));changed=1;}
  }else if(ui_page==7){
   if(enc[0]){project_cursor=bounded_add(project_cursor,enc[0],0,B1_PROJECT_SLOTS-1);b1_name_edit_begin();changed=1;}
   if(enc[1]||sel){name_cursor=bounded_add(name_cursor,enc[1]+sel,0,B1_PROJECT_NAME_MAX-1u);changed=1;}
@@ -678,7 +702,7 @@ void fm1_cstart(void){
   (void)b1_storage_open(&b1_saved,&b1_flash_io);
   /* Restore live parameters once, before audio DMA starts; never load
    * saved voice/note runtime state. REC recovery deliberately skips this. */
-  if(b1_saved.archive.live_valid &&
+  if(b1_saved.autosave_enabled && b1_saved.archive.live_valid &&
      b1_project_apply(&b1_saved.archive.live,&b1_keys,&b1_audio)){
    chord_quality=b1_keys.chord_map[chord_cursor];
   }

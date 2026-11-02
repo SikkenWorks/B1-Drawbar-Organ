@@ -11,6 +11,7 @@
 #define HDR_LEN 12u
 #define HDR_CRC 16u
 #define HDR_COMMIT 24u
+#define HDR_AUTOSAVE 28u
 _Static_assert(sizeof(struct b1_project_archive)<=B1_STORAGE_SECTOR-B1_STORAGE_DATA_OFFSET,
  "B1 12-project archive must fit a single physical flash sector");
 static void zero(uint8_t *p,uint32_t n){while(n--)*p++=0u;}
@@ -60,7 +61,7 @@ static int blank_sector(const struct b1_storage_io *io,uint32_t off){
  }
  return 1;
 }
-struct probe {uint8_t owned,valid,blank,committed;uint32_t gen;};
+struct probe {uint8_t owned,valid,blank,committed,autosave_enabled;uint32_t gen;};
 /* Main-loop-only storage workspace. Keeping the archive outside the small FM1
  * C stack prevents nested CRC/probe calls from overflowing the stack. */
 static struct b1_project_archive b1_probe_workspace __attribute__((section(".pool")));
@@ -132,6 +133,9 @@ static int probe_at(const struct b1_storage_io *io,uint32_t at,struct probe *q,
   if(io->read(io->ctx,at+B1_STORAGE_DATA_OFFSET,(uint8_t*)&b1_probe_workspace,sizeof(b1_probe_workspace)))return -1;
   if(b1_storage_crc(&b1_probe_workspace,sizeof(b1_probe_workspace))!=get32(header+HDR_CRC)||!archive_valid(&b1_probe_workspace))return 0;
  }else return 0;
+ /* Any pre-V5.3 journal has 0xFFFFFFFF at this unused offset: OFF.
+  * A damaged/unrecognized token also fails closed to OFF. */
+ q->autosave_enabled=(uint8_t)(get32(header+HDR_AUTOSAVE)==B1_STORAGE_AUTOSAVE_ON);
  q->valid=1u;q->gen=get32(header+HDR_GEN);
  if(archive)*archive=b1_probe_workspace;
  return 0;
@@ -150,7 +154,7 @@ int b1_storage_open(struct b1_storage *s,const struct b1_storage_io *io){
   * discovered automatically. Foreign sectors are NEVER used, even if one
   * of our own sectors remains valid. A second writable bank is essential. */
  uint32_t best=0u,spare=0u,gen=0u;
- uint8_t have=0u;
+ uint8_t have=0u,best_auto=0u;
  /* Persistent scratch, never on the ISR stack. */
  for(uint32_t at=B1_STORAGE_SCAN_START;at<B1_STORAGE_SCAN_END;at+=B1_STORAGE_SECTOR){
   struct probe pr;
@@ -158,7 +162,7 @@ int b1_storage_open(struct b1_storage *s,const struct b1_storage_io *io){
   if(pr.valid && (!have || (int32_t)(pr.gen-gen)>0)){
    struct probe recheck;
    if(probe_at(io,at,&recheck,&b1_best_workspace)||!recheck.valid){s->state=B1_STORAGE_ERROR;return -2;}
-   have=1u;gen=pr.gen;best=at;
+   have=1u;gen=pr.gen;best=at;best_auto=recheck.autosave_enabled;
   }
  }
  /* Choose the latest older VALID bank preferentially, otherwise a BLANK
@@ -177,7 +181,7 @@ int b1_storage_open(struct b1_storage *s,const struct b1_storage_io *io){
  }
  spare=older_found?older:(empty?empty:interrupted);
  if(have){
-  s->archive=b1_best_workspace;s->generation=gen;s->sector[0]=best;
+  s->archive=b1_best_workspace;s->generation=gen;s->autosave_enabled=best_auto;s->sector[0]=best;
   s->sector[1]=spare;s->active_bank=0;
   s->state=spare?B1_STORAGE_READY:B1_STORAGE_LOCKED;
   return spare?1:-3;
@@ -204,7 +208,7 @@ int b1_storage_open(struct b1_storage *s,const struct b1_storage_io *io){
  if(chosen>=0){
   struct probe check;
   if(probe_bank(io,(uint8_t)chosen,&check,&temp)||!check.valid){s->state=B1_STORAGE_ERROR;return -2;}
-  s->archive=temp;s->generation=check.gen;s->active_bank=(int8_t)chosen;s->state=B1_STORAGE_READY;
+  s->archive=temp;s->generation=check.gen;s->autosave_enabled=check.autosave_enabled;s->active_bank=(int8_t)chosen;s->state=B1_STORAGE_READY;
   return 1;
  }
  /* A clean blank installation is allowed. Foreign data gets a hard lock. */
@@ -239,6 +243,9 @@ int b1_storage_commit(struct b1_storage *s,const struct b1_storage_io *io,
  put32(header+HDR_GEN,gen);
  put32(header+HDR_LEN,sizeof(struct b1_project_archive));
  put32(header+HDR_CRC,b1_storage_crc(candidate,sizeof(*candidate)));
+ /* Keep project bytes/layout and schema at V4.9 format. Old bootloader and
+  * old B1 builds ignore this unused header slot. */
+ put32(header+HDR_AUTOSAVE,s->autosave_enabled?B1_STORAGE_AUTOSAVE_ON:0u);
  /* First mark target as B1-owned, then write data, finally commit. */
  if(io->program(io->ctx,at,header,sizeof(header)))return -5;
  const uint8_t *p=(const uint8_t*)candidate;
@@ -252,6 +259,9 @@ int b1_storage_commit(struct b1_storage *s,const struct b1_storage_io *io,
  uint8_t final[4];put32(final,B1_STORAGE_COMMIT);
  if(io->program(io->ctx,at+HDR_COMMIT,final,4u))return -9;
  if(io->read(io->ctx,at+HDR_COMMIT,header,4u)||get32(header)!=B1_STORAGE_COMMIT)return -10;
+ /* Read the option back from flash before declaring the journal committed. */
+ if(io->read(io->ctx,at+HDR_AUTOSAVE,header,4u)||
+    get32(header)!=(s->autosave_enabled?B1_STORAGE_AUTOSAVE_ON:0u))return -13;
  s->archive=*candidate;s->generation=gen;s->active_bank=(int8_t)next;s->state=B1_STORAGE_READY;
  return 0;
 }

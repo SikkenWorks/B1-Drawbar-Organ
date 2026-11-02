@@ -78,6 +78,9 @@ int main(int argc,char **argv){
  s.audio_diag=0;
  s.page=4;s.project_storage_state=B1_STORAGE_EMPTY;
  emit(argv[1],"13-project-menu",&s);
+ s.autosave_enabled=1u;emit(argv[1],"13-auto-save-on",&s);
+ s.autosave_pending=1u;emit(argv[1],"13-auto-save-pending",&s);
+ s.autosave_enabled=0u;s.autosave_pending=0u;
  static char names[B1_PROJECT_SLOTS][B1_PROJECT_NAME_MAX+1u];
  s.project_storage_state=B1_STORAGE_READY;s.project_names=(const char (*)[B1_PROJECT_NAME_MAX+1u])names;
  s.project_mask=(1u<<0)|(1u<<11);

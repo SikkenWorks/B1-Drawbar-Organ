@@ -19,6 +19,7 @@ struct b1_ui_state {
  uint8_t ota_step; int32_t ota_error;
  uint8_t reclaim_armed;
  uint8_t project_notice;
+ uint8_t autosave_enabled,autosave_pending;
 };
 /* Frame must contain 240 * 240 uint16_t pixels. Exactly the same function
  * is linked into the real FM1 firmware and into native screenshot tests. */
