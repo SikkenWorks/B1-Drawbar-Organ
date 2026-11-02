@@ -1,0 +1,18 @@
+PASS /tmp/tmpu3m4g91_/B1-self.ufw rc=0 reads=2372 special=1 erases=5 writes=17 commits=1 ms=4785 stageId=ota-FM-1_015
+PASS /tmp/tmpu3m4g91_/B1-self-residual-loader.ufw rc=0 reads=2372 special=1 erases=5 writes=17 commits=1 ms=4759 stageId=ota-FM-1_015
+PASS /tmp/tmpu3m4g91_/B1-5_5.ufw rc=0 reads=2372 special=1 erases=5 writes=17 commits=1 ms=4785 stageId=ota-FM-1_015
+PASS /tmp/tmpu3m4g91_/B1-5_5-residual-loader.ufw rc=0 reads=2372 special=1 erases=5 writes=17 commits=1 ms=4759 stageId=ota-FM-1_015
+PASS /tmp/tmpu3m4g91_/BEETLE.ufw rc=0 reads=2372 special=1 erases=5 writes=17 commits=1 ms=4785 stageId=ota-FM-1_015
+PASS /tmp/tmpu3m4g91_/BEETLE-residual-loader.ufw rc=0 reads=2372 special=1 erases=5 writes=17 commits=1 ms=4759 stageId=ota-FM-1_015
+PASS /tmp/tmpu3m4g91_/RUPTURE.ufw rc=0 reads=2372 special=1 erases=5 writes=17 commits=1 ms=4785 stageId=ota-FM-1_015
+PASS /tmp/tmpu3m4g91_/RUPTURE-residual-loader.ufw rc=0 reads=2372 special=1 erases=5 writes=17 commits=1 ms=4759 stageId=ota-FM-1_015
+PASS /tmp/tmpu3m4g91_/V15.ufw rc=0 reads=2548 special=1 erases=5 writes=42 commits=1 ms=5136 stageId=ota-FM-1_015
+PASS /tmp/tmpu3m4g91_/V15-residual-loader.ufw rc=0 reads=2548 special=1 erases=5 writes=42 commits=1 ms=5135 stageId=ota-FM-1_015
+PASS /tmp/tmpu3m4g91_/no-success.ufw rc=-13 reads=2375 special=4 erases=10 writes=16 commits=0 ms=4788 stageId=
+PASS /tmp/tmpu3m4g91_/cancel.ufw rc=-22 reads=27 special=0 erases=0 writes=0 commits=0 ms=51 stageId=
+PASS /tmp/tmpu3m4g91_/erase-fail.ufw rc=-17 reads=2371 special=0 erases=2 writes=0 commits=0 ms=4756 stageId=
+PASS /tmp/tmpu3m4g91_/readback-corrupt.ufw rc=-11 reads=2371 special=0 erases=10 writes=15 commits=0 ms=4770 stageId=
+PASS /tmp/tmpu3m4g91_/unknown-stage.ufw rc=-15 reads=2370 special=0 erases=0 writes=0 commits=0 ms=4715 stageId=
+PASS /tmp/tmpu3m4g91_/bad-app-valid-container.ufw rc=-21 reads=2370 special=0 erases=0 writes=0 commits=0 ms=4715 stageId=
+PASS /tmp/tmpu3m4g91_/bad-payload.ufw rc=-22 reads=1195 special=0 erases=0 writes=0 commits=0 ms=2385 stageId=
+PASS: 17 native OTA cases; host simulation only.

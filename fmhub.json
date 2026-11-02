@@ -1,4 +1,6 @@
 {
-  "what": "B1 transforms your M-VAVE FM1 into a powerful drawbar rock organ. Shape rich tonewheel harmonics with nine drawbars, add percussion and rotary speaker effects, and explore everything from warm vintage tones to gritty rock organ sounds.",
-  "kinds": ["synth"]
+  "what": "B1 turns the M-VAVE FM1 into a compact drawbar rock organ with 91 shared tonewheels, nine drawbars per registration, percussion, Leslie, B3/ROCK tones, MIDI and expressive live controls.",
+  "kinds": [
+    "synth"
+  ]
 }

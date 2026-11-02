@@ -41,6 +41,7 @@ static int ota_erase(uint32_t off);
 static int ota_prog(uint32_t off, const void *p, uint32_t n);
 static int ota_fread(uint32_t off, void *p, uint32_t n);
 static void ota_show(uint32_t step, int32_t code);
+static void ota_progress_update(uint32_t done, uint32_t total);
 static void ota_commit(const uint8_t *parm);
 
 static uint32_t ota_rd16(const uint8_t *p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8; }
@@ -106,7 +107,7 @@ static uint32_t ota_unpack7(const uint8_t *in, uint32_t n, uint8_t *out, uint32_
 }
 
 static uint8_t ota_msg[8 + 32], ota_wire[2 + 48];
-static uint8_t ota_dec[OTA_FRAME_MAX] __attribute__((section(".pool")));           /* decoded host message */
+static uint8_t ota_dec[OTA_FRAME_MAX];           /* decoded host message */
 
 static int ota_send_msg(uint32_t cmd, const uint8_t *body, uint32_t n)   /* n <= 32 */
 {
@@ -161,10 +162,11 @@ static void ota_service(void)
 {
     uint32_t d = ota_take();
 #if defined(TRACK_FIRMWARE)
-    if (d && beetle_transfer_handle(d)) return;
+    if(d && beetle_transfer_handle(d))return;
 #endif
     if (d == 7u && ota_dec[2] == 0x11)
         ota_reply_identity();
+
 }
 
 /* one read request (3 tries x 5 s); data -> dst */
@@ -233,313 +235,495 @@ static int ota_stage_head(uint32_t len)
     return ota_prog(OTA_AREA, h, 32);
 }
 
-/* UFW container validation, including distinct, bounded and non-overlapping
- * payload entries.  This prevents accepting arbitrary host-controlled offsets. */
-static uint32_t ota_file_crc[2];
-#define B1_OTA_APP_XIP 0x02000120u
-#define B1_OTA_APP_FLASH 0x4000u
-#define B1_OTA_APP_SLOT 0x8DFBCu
-#define B1_OTA_FLASH_BYTES 0x93000u
-#define B1_OTA_CHIP_KEY 0x980Fu
-
-static int ota_ufw(uint8_t *hdr, uint32_t *fl_off, uint32_t *fl_len,
-                   uint32_t *ota_off, uint32_t *ota_len)
+/* UFW header + entry list (1 KiB). Official M-VAVE V15 has EIGHT
+ * entries, including auxiliary calibration and script entries that do not
+ * appear in Felucca-style TWO-entry update packages. Both layouts are
+ * checked strictly: neither extra executables nor arbitrary UFW records
+ * are accepted. Only flash.bin and ota.bin carry the OTA writer payload.
+ * The remaining V15 metadata is never executed or staged. */
+static int ota_entry_name_eq(const uint8_t *entry,const char *name,uint32_t n){
+    return n<16u && ota_memeq(entry+0x40u,(const uint8_t*)name,n) && entry[0x40u+n]==0u;
+}
+static int ota_ufw(uint8_t *hdr,uint32_t *fl_off,uint32_t *fl_len,uint32_t *ota_off,uint32_t *ota_len)
 {
-    uint32_t nent, seen_flash=0, seen_ota=0, total, i, f_start=0, f_end=0, o_start=0, o_end=0;
-    *fl_off = *fl_len = *ota_off = *ota_len = 0;
-    if (ota_read(0, hdr, 512) || ota_read(512, hdr+512, 512)) return -1;
-    ota_jl_enc(hdr, 0x40);
-    nent = ota_rd16(hdr + 8);
-    total = ota_rd32(hdr + 4);
-    if (ota_crc16(hdr+2,0x3Eu,0) != ota_rd16(hdr) ||
-        nent != 2u || total < 0x400u || total > 0x200000u ||
-        !ota_memeq(hdr+16,(const uint8_t *)"AC791N",6) ||
-        ota_crc16(hdr+0x40,nent*0x50u,0) != ota_rd16(hdr+2)) return -2;
-    for (i=0; i<nent; ++i) {
+    static const uint16_t stock_types[8]={0u,2u,50u,52u,100u,251u,161u,255u};
+    static const char *const stock_names[8]={"flash.bin","info.log","USR","isd_config.ini",
+                                             "ota.bin","script.ver","blimit.bin","tail.bin"};
+    static const uint8_t stock_name_lens[8]={9u,8u,3u,14u,7u,10u,10u,8u};
+    uint32_t i,nent,declared_total,next_off=0x400u,seen_flash=0u,seen_ota=0u;
+    *fl_off=*fl_len=*ota_off=*ota_len=0u;
+    if(ota_read(0,hdr,512u)||ota_read(512u,hdr+512u,512u))return -1;
+    ota_jl_enc(hdr,0x40u);
+    nent=ota_rd16(hdr+8u);
+    declared_total=ota_rd32(hdr+4u);
+    /* 8=the original V15 layout; 2=the documented app-only container. */
+    if(ota_crc16(hdr+2u,0x3eu,0)!=ota_rd16(hdr) ||
+       (nent!=2u && nent!=8u) ||
+       ota_crc16(hdr+0x40u,nent*0x50u,0)!=ota_rd16(hdr+2u) ||
+       !ota_memeq(hdr+16u,(const uint8_t*)"AC791N",6u) ||
+       declared_total<0x400u || declared_total>0x200000u)
+        return -2;
+    for(i=0u;i<nent;i++){
         uint8_t *e=hdr+0x40u+i*0x50u;
-        uint32_t typ, off, len;
-        ota_jl_enc(e,0x50);
-        typ=ota_rd16(e);off=ota_rd32(e+8);len=ota_rd32(e+12);
-        if (off<0x400u || off>total || len>total-off ||
-            len==0u || (off&0xffu) || ota_rd32(e+16)<len ||
-            (ota_rd32(e+16)&31u)) return -3;
-        if (typ==0u && !seen_flash++) {
-            *fl_off=off; *fl_len=len; f_start=off; f_end=off+len;
-            ota_file_crc[0]=ota_rd16(e+4);
-        } else if (typ==100u && !seen_ota++) {
-            *ota_off=off; *ota_len=len; o_start=off; o_end=off+len;
-            ota_file_crc[1]=ota_rd16(e+4);
-        } else return -3;
+        uint32_t type,off,len,padded;
+        ota_jl_enc(e,0x50u);
+        type=ota_rd16(e);off=ota_rd32(e+8u);
+        len=ota_rd32(e+12u);padded=ota_rd32(e+16u);
+        if(nent==8u){
+            if(type!=stock_types[i] || !ota_entry_name_eq(e,stock_names[i],stock_name_lens[i]))return -3;
+        }else if(!((i==0u&&type==0u&&ota_entry_name_eq(e,"flash.bin",9u)) ||
+                   (i==1u&&type==100u&&ota_entry_name_eq(e,"ota.bin",7u))))return -3;
+        if((nent==8u && (ota_rd16(e+2u)!=i || off!=next_off)) ||
+           ota_rd16(e+6u)!=0u || off<0x400u || off>declared_total ||
+           len>declared_total-off || padded<len || (padded&31u)!=0u ||
+           (len==0u && !(nent==8u&&i==1u)) ||
+           (i+1u<nent && padded>declared_total-off))return -3;
+        /* The last entry ends at its actual length, not its padded size. */
+        if(i+1u<nent)next_off=off+padded;
+        else if(off+len!=declared_total)return -3;
+        if(type==0u){
+            if(seen_flash++)return -3;
+            *fl_off=off;*fl_len=len;
+        }else if(type==100u){
+            if(seen_ota++)return -3;
+            *ota_off=off;*ota_len=len;
+        }
     }
-    if (!seen_flash || !seen_ota || (f_start<o_end && o_start<f_end) ||
-        *fl_len!=B1_OTA_FLASH_BYTES || *ota_len<64u ||
-        *ota_len>OTA_AREA_LEN) return -3;
+    if(seen_flash!=1u||seen_ota!=1u || *fl_len!=0x93000u ||
+       *ota_off<*fl_off+*fl_len || *ota_len<512u || *ota_len>OTA_AREA_LEN)return -3;
     return 0;
 }
 
-/* Each flash.bin app area XIP block has its own JieLi SFC XOR key.
- * The 91 tonewheel engine is independent of this code: only OTA CHECK uses it. */
-static void b1_ota_xor32(uint8_t *p,uint32_t key)
-{
-    for(uint32_t i=0;i<32u;i++){
-        p[i]^=(uint8_t)key;
-        key=((key<<1) ^ ((key&0x8000u)?0x1021u:0u))&0xffffu;
-    }
-}
-
-/* Validate the incoming app image independently of its protected boot bytes.
- * Requires the known AC791N/0x980F/0x02000120/0x4000 app-only layout.
- * In particular, a different boot image is NEVER staged or overwritten. */
-static int b1_ota_app_layout(uint32_t fl_off,uint8_t *b)
-{
-    uint8_t top[0xA0], dir[64];
-    static uint8_t isd[1024] __attribute__((section(".pool")));
-    uint32_t isd_off,isd_size,app_size,app_slot,app_crc,isd_crc,head_crc;
-    if(ota_read(fl_off,top,sizeof top))return -21;
-    for(uint32_t i=0;i<sizeof top;i+=32u)b1_ota_xor32(top+i,0xffffu);
-    head_crc=ota_crc16(top+2,30,0);
-    if(ota_rd16(top)!=head_crc ||
-       !ota_memeq(top+0x20+16,(const uint8_t *)"uboot.boot",10) ||
-       !ota_memeq(top+0x40+16,(const uint8_t *)"isd_config.ini",14) ||
-       !ota_memeq(top+0x60+16,(const uint8_t *)"app_dir_head",12) ||
-       ota_rd32(top+0x60+4)!=B1_OTA_APP_FLASH) return -21;
-    if(ota_crc16(top+0x40+2,30,0)!=ota_rd16(top+0x40) ||
-       ota_crc16(top+0x60+2,30,0)!=ota_rd16(top+0x60))return -21;
-    isd_off=ota_rd32(top+0x40+4);isd_size=ota_rd32(top+0x40+8);
-    isd_crc=ota_rd16(top+0x40+2);
-    if(isd_off<0xA0u || isd_size<32u || isd_size>sizeof isd ||
-       isd_off>=B1_OTA_APP_FLASH || isd_size>B1_OTA_APP_FLASH-isd_off)return -21;
-    for(uint32_t i=0;i<isd_size;){
-        uint32_t n=isd_size-i;if(n>512u)n=512u;
-        if(ota_read(fl_off+isd_off+i,isd+i,n))return -21;
-        i+=n;
-    }
-    if(ota_crc16(isd,isd_size,0)!=isd_crc)return -21;
-    /* JieLi's isd_config.ini encodes each key bit by XORing mirrored bytes. */
-    uint32_t key=0,threshold=0;
-    for(uint32_t i=0;i<16u;i++)threshold+=isd[i];
-    threshold&=0xffu;
-    if(threshold>=0xe0u)threshold=0xaau;
-    else if(threshold<=0x10u)threshold=0x55u;
-    for(uint32_t i=0;i<16u;i++){
-        uint32_t v=isd[16+i]^isd[15-i];
-        if(v<threshold)key|=1u<<i;
-    }
-    if(key!=B1_OTA_CHIP_KEY)return -22;
-    if(ota_read(fl_off+B1_OTA_APP_FLASH,dir,sizeof dir))return -21;
-    b1_ota_xor32(dir,B1_OTA_CHIP_KEY);
-    b1_ota_xor32(dir+32u,B1_OTA_CHIP_KEY^(32u>>2));
-    app_size=ota_rd32(dir+8);
-    app_slot=ota_rd32(dir+32+8);
-    app_crc=ota_rd16(dir+32+2);
-    if(ota_rd16(dir)!=ota_crc16(dir+2,30,0) ||
-       ota_rd16(dir+32)!=ota_crc16(dir+34,30,0) ||
-       ota_rd32(dir+4)!=B1_OTA_APP_XIP ||
-       !ota_memeq(dir+16,(const uint8_t *)"app_area_head",13) ||
-       !ota_memeq(dir+32+16,(const uint8_t *)"app.bin",7) ||
-       ota_rd32(dir+32+4)!=0x120u ||
-       app_slot!=B1_OTA_APP_SLOT ||
-       app_size<0x120u+B1_OTA_APP_SLOT ||
-       app_size>B1_OTA_FLASH_BYTES-B1_OTA_APP_FLASH) return -23;
-    /* Do not accept a self-consistent UFW wrapper containing a damaged XIP app. */
-    uint32_t check=0;
-    for(uint32_t off=0;off<B1_OTA_APP_SLOT;){
-        uint32_t n=B1_OTA_APP_SLOT-off;
-        if(n>512u)n=512u;
-        if(ota_read(fl_off+B1_OTA_APP_FLASH+0x120u+off,b,n))return -24;
-        for(uint32_t j=0;j<n;j+=32u){
-            uint32_t part=n-j;if(part>32u)part=32u;
-            if(part!=32u){
-                uint8_t tail[32];
-                for(uint32_t k=0;k<32u;k++)tail[k]=k<part?b[j+k]:0u;
-                b1_ota_xor32(tail,B1_OTA_CHIP_KEY^((0x120u+off+j)>>2));
-                for(uint32_t k=0;k<part;k++)b[j+k]=tail[k];
-            }else b1_ota_xor32(b+j,B1_OTA_CHIP_KEY^((0x120u+off+j)>>2));
-        }
-        check=ota_crc16(b,n,check);off+=n;
-        ota_idle();
-    }
-    return check==app_crc?0:-24;
-}
-
-/* Verify BOTH payload checksums from the external UFW directory before erase.
- * We never execute the external ota.bin; CRC only catches transmission errors. */
-static int b1_ota_verify_payload(uint32_t off,uint32_t len,uint32_t expected,uint8_t *b)
-{
-    uint32_t crc=0;
-    for(uint32_t i=0;i<len;){
-        uint32_t n=len-i;if(n>512u)n=512u;
-        if(ota_read(off+i,b,n))return -25;
-        crc=ota_crc16(b,n,crc);i+=n;
-        ota_idle();
-    }
-    return crc==expected?0:-25;
-}
-
-/* Cross-firmware family validation, B1 V4.6.
- * The incoming Felucca-family loader is parsed and CRC-checked, but is NOT
- * executed for the known original family. A different (but compatible)
- * version-tagged loader can be staged for cross-firmware transitions after
- * full structural and CRC checks. CRC16 only proves container consistency,
- * never publisher authenticity: the host (The Firmware Hub) MUST pin the
- * original package's SHA-256 before offering an update.
- * Vendor V15 FULL_FLASH continues through its separate strict pathway. */
+/* ETCH V1.60: stock restoration remains pinned to the original verified
+ * official payload and loader. Compatible Felucca-family packages are allowed
+ * through strict structure, compression, integrity and app-layout checks,
+ * but their supplied executable is NEVER staged or run: the audited ETCH
+ * app-only loader is always used. No change to application USB identity. */
 #define ETCH_OTA_BODY_LEN 6898u
+#define ETCH_STOCK_OTA_BODY_LEN 19937u
+static const uint8_t etch_stock_ota_digest[32]={
+ 0xa1,0x9b,0xb1,0xbe,0xe7,0x2c,0x12,0xaf,0x9d,0xb2,0x18,0xfd,0x71,0x3b,0x90,0x32,
+ 0x73,0xad,0x9d,0x4a,0xe8,0x68,0xd1,0x30,0x0d,0x80,0x41,0xd6,0x23,0x5d,0xc1,0x34
+};
 #define ETCH_OTA_OWNER (OTA_RES+0x80u)
-/* Exact immutable loader bytes, compiled into the B1 XIP image.  This is
- * stricter than a checksum and avoids firmware-side SHA-256 discrepancies
- * that manifested as OTA -16 on real B1 hardware.  External firmware with
- * a different loader must use the independent UBOOT / vendor updater path. */
-#include "b1_pinned_loader.h"
-static const uint8_t etch_ota_owner[16]="B1-OTA-STAGE-V4";
-static const uint8_t etch_ota_old_owner[16]="ETCH-OTA-STAGE-1";
-static const uint8_t b1_legacy_beetle_owner[16]="BEETLE-OTA-STAGE";
+static const uint8_t etch_ota_digest[32]={0xd0,0xb1,0xa0,0x5c,0x63,0x03,0x0b,0x58,0xe5,0xbe,0x06,0xb9,0x37,0x51,0xe6,0xcc,0x37,0x5d,0x3d,0x34,0xee,0xc5,0x84,0x10,0x9f,0x97,0xfd,0x31,0xf0,0xa4,0x2a,0x78};
+static const uint8_t etch_ota_owner[16]="ETCH-OTA-STAGE-1";
+static const uint8_t b1_legacy_owner[16]="B1-OTA-STAGE-V4";
+static const uint8_t b1_beetle_owner[16]="BEETLE-OTA-STAGE";
 static uint8_t ota_touched;
-static uint8_t b1_staged_foreign_loader;
-static int etch_ota_hash(uint32_t off,uint8_t *b,uint8_t from_host){
- for(uint32_t i=0;i<ETCH_OTA_BODY_LEN;){
-  uint32_t n=ETCH_OTA_BODY_LEN-i;if(n>512u)n=512u;
+static int etch_ota_hash_pinned(uint32_t off,uint8_t *b,uint8_t from_host,
+                                  uint32_t body_len,const uint8_t expected[32]){
+ struct etch_sha256 h;uint8_t digest[32];etch_sha256_init(&h);
+ for(uint32_t i=0;i<body_len;){uint32_t n=body_len-i;if(n>512)n=512;
   if(from_host?ota_read(off+i,b,n):ota_fread(off+i,b,n))return 0;
-  if(!ota_memeq(b,b1_trusted_loader+i,n))return 0;
-  i+=n;ota_idle();
+  etch_sha256_add(&h,b,n);i+=n;ota_idle();
  }
- return 1;
+ etch_sha256_end(&h,digest);return ota_memeq(digest,expected,32);
 }
-/* Validate the complete *incoming* versioned Felucca-family loader BEFORE
- * modifying any staging flash. V4.4 already verified the UFW entry CRC, but
- * was missing the loader's own data CRC and family tag check. A one-off SHA
- * whitelist is NOT used: legitimately recompiled family loaders differ.
- * Original known loader identity and stock V15 take their existing paths. */
-#define B1_OTA_FELUCCA_MARK_LEN 16u
-#define B1_OTA_LOADER_MAX (OTA_RES-OTA_AREA-32u)
-static int b1_ota_compatible_loader(uint32_t off, uint32_t len,
-                                    uint32_t declared_crc, uint8_t *buf)
-{
-    static const uint8_t tag[B1_OTA_FELUCCA_MARK_LEN] = "FELUCCA-LOADER-1";
-    uint32_t crc = 0, i, n, j;
-    int found = 0;
-    /* Keep the last 256-byte OTA record sector reserved; the valid executable
-     * entry is already checked against AC791N RAM at 0x01c0a800 upstream. */
-    if (len < 128u || len > B1_OTA_LOADER_MAX)
-        return -16;
-    for (i = 0; i < len; i += n) {
-        n = len - i;
-        if (n > 512u) n = 512u;
-        if (ota_read(off + 32u + i, buf, n)) return -16;
-        crc = ota_crc16(buf, n, crc);
-        /* The versioned loader marker lives in its prologue. Restrict it to
-         * the first 512 bytes rather than trusting a trailing decoy string. */
-        if (i == 0u)
-            for (j = 0; j + B1_OTA_FELUCCA_MARK_LEN <= n; ++j)
-                if (ota_memeq(buf + j, tag, B1_OTA_FELUCCA_MARK_LEN))
-                    found = 1;
-        ota_idle();
-    }
-    return found && crc == declared_crc ? 0 : -16;
+static int etch_ota_hash(uint32_t off,uint8_t *b,uint8_t from_host){
+ return etch_ota_hash_pinned(off,b,from_host,ETCH_OTA_BODY_LEN,etch_ota_digest);
 }
-
 /* No automatic claim of nonblank unknown bytes in this reserved region.
  * A complete pinned older loader or our ownership token permits a retry. */
+/* RUPTURE V1.43: OTA stage can be left occupied by the *previous* firmware's
+ * completed update, even though the newly installed RUPTURE app is healthy.
+ * Do not assume every FM1 has a blank staging sector or the ETCH SHA-pinned
+ * loader. Only a recognizable, bounded JLFS LOADER.BIN may be reclaimed.
+ * Nothing is erased here: the foreign executable is never run, and every
+ * subsequent write still targets only the dedicated 0xE0000..0xE4FFF area.
+ */
+static int etch_old_loader_stage(uint32_t staged_len){
+ uint8_t inner[32];
+ uint32_t body_len;
+ if(staged_len<32u+96u || staged_len>OTA_AREA_LEN-0x100u)return 0;
+ body_len=staged_len-32u;
+ if(ota_fread(OTA_AREA+32u,inner,32u))return 0;
+ if(ota_rd16(inner)!=ota_crc16(inner+2u,30u,0u) ||
+    ota_rd32(inner+8u)!=0x01C0A800u ||
+    !ota_memeq(inner+16u,(const uint8_t*)"usb_hid_ota.bin",15u) ||
+    (ota_rd32(inner+4u)&3u)!=0u ||
+    ota_rd32(inner+4u)<64u || ota_rd32(inner+4u)>0x14000u ||
+    body_len>OTA_AREA_LEN-0x200u)return 0;
+ /* The inner header's compressed-archive CRC is verified when the loader is
+  * received as a new package. This old executable will NOT be executed:
+  * a structurally recognized residual OTA file only authorizes *reclaiming*
+  * the dedicated staging area after validating the new incoming package. */
+ return 1;
+}
 static int etch_ota_available(uint8_t *b){
  uint8_t head[32];
  if(ota_fread(ETCH_OTA_OWNER,b,16))return 0;
- if(ota_memeq(b,etch_ota_owner,16)||ota_memeq(b,etch_ota_old_owner,16)||ota_memeq(b,b1_legacy_beetle_owner,16))return 1;
+ if(ota_memeq(b,etch_ota_owner,16) ||
+    ota_memeq(b,b1_legacy_owner,16) ||
+    ota_memeq(b,b1_beetle_owner,16))return 1;
  if(ota_fread(OTA_AREA,head,32))return 0;
- if(ota_rd16(head)==ota_crc16(head+2,30,0)&&ota_rd32(head+4)==OTA_AREA&&ota_rd32(head+8)==ETCH_OTA_BODY_LEN+32&&ota_memeq(head+16,(const uint8_t*)"LOADER.BIN",10)&&etch_ota_hash(OTA_AREA+32,b,0))return 1;
- for(uint32_t i=0;i<OTA_AREA_LEN;i+=512){if(ota_fread(OTA_AREA+i,b,512))return 0;for(uint32_t j=0;j<512;j++)if(b[j]!=255)return 0;ota_idle();}
+ if(ota_rd16(head)==ota_crc16(head+2u,30u,0u)&&
+    ota_rd32(head+4u)==OTA_AREA && head[12]==0x41u &&
+    ota_memeq(head+16u,(const uint8_t*)"LOADER.BIN",10u)){
+     uint32_t staged_len=ota_rd32(head+8u);
+     if(staged_len==ETCH_OTA_BODY_LEN+32u&&etch_ota_hash(OTA_AREA+32u,b,0))return 1;
+     if(staged_len==ETCH_STOCK_OTA_BODY_LEN+32u&&
+        etch_ota_hash_pinned(OTA_AREA+32u,b,0,ETCH_STOCK_OTA_BODY_LEN,etch_stock_ota_digest))return 1;
+     /* Felucca/BEETLE/X0X and other compatible families may leave a distinct
+      * valid loader in this reserved region after a successful installation. */
+     if(etch_old_loader_stage(staged_len))return 1;
+ }
+ for(uint32_t i=0;i<OTA_AREA_LEN;i+=512u){
+  if(ota_fread(OTA_AREA+i,b,512u))return 0;
+  for(uint32_t j=0;j<512u;j++)if(b[j]!=255u)return 0;
+  ota_idle();
+ }
+ return 1;
+}
+/* The official stock loader can overwrite the protected first 16 KiB.
+ * Reject a full-flash stock handoff if the board actually has a different
+ * boot image (e.g. FM1 V16 revision). Never gamble with a bootloader.
+ * App-only updates intentionally do NOT require this comparison. */
+static int etch_stock_boot_head_matches(uint32_t flash_off,uint8_t *host,uint8_t *installed){
+ /* The original ETCH/Felucca-derived RUPTURE boot area has the same uboot,
+  * reset/configuration instructions and every flash byte as official V15,
+  * EXCEPT the CRC16 and header CRC16 of uboot.boot's directory entry at
+  * [0x20..0x23]. Those four bytes are deliberately rewritten by the
+  * official, SHA-pinned V15 full-flash OTA writer. This precise legacy pair
+  * is safe to accept, but ANY other mismatch remains an error -5. */
+ static const uint8_t stock_dir_crcs[4]={0x6du,0xc4u,0x57u,0x6eu};
+ static const uint8_t rupture_dir_crcs[4]={0xbcu,0xa2u,0xfau,0x7eu};
+ for(uint32_t off=0u;off<0x4000u;off+=512u){
+  if(ota_read(flash_off+off,host,512u)||ota_fread(off,installed,512u))return 0;
+  if(ota_memeq(host,installed,512u))continue;
+  if(off!=0u || !ota_memeq(host+0x20u,stock_dir_crcs,4u) ||
+     !ota_memeq(installed+0x20u,rupture_dir_crcs,4u))return 0;
+  for(uint32_t i=0u;i<512u;i++)
+   if((i<0x20u||i>=0x24u)&&host[i]!=installed[i])return 0;
+  ota_idle();
+ }
  return 1;
 }
 #ifndef ETCH_TEST_RESTORE_ONLY
 #define ETCH_TEST_RESTORE_ONLY 0
 #endif
-/* Reference SHA-256 of the original M-VAVE V15 flash.bin (0x93000 B). */
+/* First hardware TEST can install only the exact original V15 flash image. */
 static int etch_ota_stock(uint32_t off,uint8_t *b){
  static const uint8_t want[32]={0xc1,0x06,0x8a,0x40,0x3c,0x04,0xa6,0x37,0x8a,0x62,0x6a,0xfb,0x66,0xcc,0x21,0x7f,0x72,0xd1,0x3f,0x10,0xaa,0x20,0x0e,0x98,0x3b,0x7a,0x98,0x17,0xcc,0x1d,0xac,0x03};
  struct etch_sha256 h;uint8_t digest[32];etch_sha256_init(&h);
  for(uint32_t i=0;i<0x93000u;i+=512){if(ota_read(off+i,b,512))return 0;etch_sha256_add(&h,b,512);ota_idle();}
  etch_sha256_end(&h,digest);return ota_memeq(digest,want,32);
 }
-static int ota_stage(void)
+/* V1.50 CROSS-FIRMWARE FIX.
+ * The on-device app-only OTA loader deliberately preserves flash[0..0x3fff].
+ * Therefore a destination's protected header MUST NOT be compared bytewise
+ * against ours: Felucca 1.6 has a different valid protected header.
+ *
+ * Do not execute the incoming app-only OTA binary either: use the EXACT
+ * SHA-pinned, built-in loader, and validate the destination's standard FM1
+ * chip key, application offset and encrypted app directory before erasing.
+ * A stock full-flash image remains limited to the verified official V15.
+ * The user must still initiate the update and approve the success handshake.
+ */
+#include "ota_trusted_loader.h"
+#define ETCH_APP_FLASH_OFF 0x4000u
+#define ETCH_APP_XIP 0x02000120u
+#define ETCH_CHIP_KEY 0x980Fu
+
+static void etch_sfc_dec(uint8_t *p,uint32_t n,uint32_t ofs);
+/* JieLi flash filesystem directory entries are individually XOR encoded.
+ * Only the first 0xA0 bytes of flash.bin are ever decoded here. */
+static int etch_host_app_compatible(uint32_t off,uint8_t *scratch){
+ uint8_t top[0xA0], app[0x60],isd[512];
+ uint32_t i,isd_off=0,isd_len=0,isd_crc=0,found_app=0,found_isd=0,app_size,crc=0;
+ if(ota_read(off,top,sizeof top))return 0;
+ for(i=0;i<sizeof top;i+=32)ota_jl_enc(top+i,32);
+ if(ota_rd16(top)!=ota_crc16(top+2,30,0))return 0;
+ for(i=0;i<4;i++){
+  const uint8_t *e=top+0x20+i*32u;
+  if(ota_rd16(e)!=ota_crc16(e+2,30,0))return 0;
+  if(ota_memeq(e+16,(const uint8_t*)"app_dir_head",13)){
+   if(found_app++ || ota_rd32(e+4)!=ETCH_APP_FLASH_OFF || ota_rd32(e+8)!=0xffffffffu)return 0;
+  }
+  if(ota_memeq(e+16,(const uint8_t*)"isd_config.ini",14)){
+   if(found_isd++)return 0;
+   isd_off=ota_rd32(e+4);isd_len=ota_rd32(e+8);isd_crc=ota_rd16(e+2);
+  }
+ }
+ if(found_app!=1 || found_isd!=1 || isd_off<0xA0u || isd_off>=ETCH_APP_FLASH_OFF ||
+    isd_len<32u || isd_len>ETCH_APP_FLASH_OFF-isd_off)return 0;
+ for(i=0;i<isd_len;){
+  uint32_t n=isd_len-i;if(n>512u)n=512u;
+  if(ota_read(off+isd_off+i,isd,n))return 0;
+  crc=ota_crc16(isd,n,crc);
+  /* Decode key immediately before the scratch buffer gets reused. */
+  if(i==0){
+   uint32_t threshold=0,key=0;
+   for(uint32_t j=0;j<16u;j++)threshold+=isd[j];
+   threshold&=255u;
+   threshold=threshold>=0xe0u?0xaau:threshold<=0x10u?0x55u:threshold;
+   for(uint32_t j=0;j<16u;j++)if((uint8_t)(isd[16u+j]^isd[15u-j])<threshold)key|=1u<<j;
+   if(key!=ETCH_CHIP_KEY)return 0;
+  }
+  i+=n;
+ }
+ if(crc!=isd_crc)return 0;
+ if(ota_read(off+ETCH_APP_FLASH_OFF,app,sizeof app))return 0;
+ /* Each 32-byte SFC chunk has key ^ (offset-in-app-region >> 2). */
+ for(i=0;i<sizeof app;i+=32u){
+  uint32_t k=ETCH_CHIP_KEY^(i>>2);
+  for(uint32_t j=0;j<32u;j++){
+   app[i+j]^=(uint8_t)k;
+   k=((k<<1)^(k&0x8000u?0x1021u:0u))&0xffffu;
+  }
+ }
+ if(ota_rd16(app)!=ota_crc16(app+2,30,0) ||
+    !ota_memeq(app+16,(const uint8_t*)"app_area_head",13) ||
+    ota_rd32(app+4)!=ETCH_APP_XIP)return 0;
+ if(ota_rd16(app+32)!=ota_crc16(app+34,30,0) ||
+    !ota_memeq(app+48,(const uint8_t*)"app.bin",7) ||
+    ota_rd32(app+36)!=0x120u)return 0;
+ app_size=ota_rd32(app+40);
+ if(app_size!=0x8dfbcu || app_size>0x93000u-0x120u)return 0;
+ uint32_t area_size=ota_rd32(app+8),app_crc=ota_rd16(app+34),
+          app_off=ota_rd32(app+36),area_crc=0,bin_crc=0;
+ if(area_size<0x120u+app_size || area_size>0x93000u-0x4000u || app_off!=0x120u)return 0;
+ for(i=32u;i<area_size;){
+     uint32_t n=area_size-i;if(n>512u)n=512u;
+     if(ota_read(off+ETCH_APP_FLASH_OFF+i,scratch,n))return 0;
+     etch_sfc_dec(scratch,n,i);
+     area_crc=ota_crc16(scratch,n,area_crc);
+     uint32_t begin=i>app_off?i:app_off;
+     uint32_t end=i+n<app_off+app_size?i+n:app_off+app_size;
+     if(end>begin)bin_crc=ota_crc16(scratch+(begin-i),end-begin,bin_crc);
+     i+=n;ota_idle();
+ }
+ return bin_crc==app_crc && area_crc==ota_rd16(app+2);
+}
+
+/* JieLi SFC XOR is restarted at each 32-byte block with the offset-derived
+ * key. This works on encrypted flash bytes without allocating an app image. */
+static void etch_sfc_dec(uint8_t *p, uint32_t n, uint32_t ofs){
+    for(uint32_t i=0;i<n;i+=32u){
+        uint32_t key=ETCH_CHIP_KEY ^ ((ofs+i)>>2);
+        uint32_t count=n-i>32u?32u:n-i;
+        for(uint32_t j=0;j<count;j++){
+            p[i+j]^=(uint8_t)key;
+            key=((key<<1)^(key&0x8000u?0x1021u:0u))&0xffffu;
+        }
+    }
+}
+
+/* All data CRCs in the incoming UFW and application directory are checked
+ * before ANY erase. The community OTA loader stages our own verified writer,
+ * which programs only the fixed app area (not the protected 16 KiB boot). */
+static int etch_host_flash_integrity(uint32_t off,uint32_t len,uint32_t expected,
+                                     uint8_t *buf){
+    uint32_t crc=0;
+    for(uint32_t i=0;i<len;i+=512u){
+        uint32_t n=len-i>512u?512u:len-i;
+        if(ota_read(off+i,buf,n))return 0;
+        crc=ota_crc16(buf,n,crc);
+        ota_idle();
+    }
+    return crc==expected;
+}
+
+/* Decode length-framed JieLi LZ4 blocks; reject truncation, backreferences
+ * outside the output window and inaccurate length/CRC claims. No executable
+ * from these blocks is ever installed. */
+/* The hardware target reuses the already allocated scope DMA canvas during
+ * CHECK, while the audio engine is stopped. This adds no permanent 8 KiB RAM
+ * burden to the FM1. Host tests own equivalent private buffers. */
+#ifdef ETCH_OTA_REUSE_SCOPE
+#define etch_lz_input  ((uint8_t*)etch_scope_canvas)
+#define etch_lz_output (((uint8_t*)etch_scope_canvas)+4096u)
+#else
+static uint8_t etch_lz_input[4096] __attribute__((section(".pool")));
+static uint8_t etch_lz_output[4096] __attribute__((section(".pool")));
+#endif
+static int etch_lz4_block(const uint8_t *src,uint32_t n,uint8_t *out,uint32_t want){
+    uint32_t i=0,o=0;
+    while(i<n){
+        uint32_t token=src[i++],lit=token>>4,match=token&15u;
+        if(lit==15u){uint32_t x;do{if(i>=n)return 0;x=src[i++];if(lit>4096u-x)return 0;lit+=x;}while(x==255u);}
+        if(lit>n-i||lit>want-o)return 0;
+        for(uint32_t j=0;j<lit;j++)out[o++]=src[i++];
+        if(i==n)break;
+        if(i+2u>n)return 0;
+        uint32_t distance=ota_rd16(src+i);i+=2u;
+        if(!distance||distance>o)return 0;
+        if(match==15u){uint32_t x;do{if(i>=n)return 0;x=src[i++];if(match>4096u-x)return 0;match+=x;}while(x==255u);}
+        match+=4u;
+        if(match>want-o)return 0;
+        for(uint32_t j=0;j<match;j++){out[o]=out[o-distance];o++;}
+    }
+    return o==want;
+}
+
+static int etch_host_loader_compatible(uint32_t off,uint32_t length,
+                                        uint8_t *buf){
+    uint8_t inner[32],block[8];
+    uint32_t pos=32u,decoded=0,crc=0,want;
+    if(length<96u||length>OTA_AREA_LEN-0x200u)return 0;
+    if(ota_read(off,inner,sizeof inner))return 0;
+    if(ota_rd16(inner)!=ota_crc16(inner+2,30u,0) ||
+       ota_rd32(inner+8)!=0x01C0A800u ||
+       !ota_memeq(inner+16,(const uint8_t*)"usb_hid_ota.bin",15u))return 0;
+    want=ota_rd32(inner+4);
+    if(want<64u || want>0x14000u || (want&3u)!=0u)return 0;
+    /* Recognize the decoded, versioned Felucca entry stub rather than any
+     * single compressed byte sequence: recompilation may change LZ4 blocks. */
+    while(pos<length){
+        uint32_t compressed,expanded;
+        if(length-pos<8u || ota_read(off+pos,block,8u))return 0;
+        compressed=ota_rd32(block);expanded=ota_rd32(block+4);
+        pos+=8u;
+        if(!compressed || compressed>4096u ||
+           !expanded || expanded>4096u ||
+           compressed>length-pos || expanded>want-decoded)return 0;
+        for(uint32_t j=0;j<compressed;j+=512u){
+            uint32_t n=compressed-j>512u?512u:compressed-j;
+            if(ota_read(off+pos+j,etch_lz_input+j,n))return 0;
+        }
+        if(!etch_lz4_block(etch_lz_input,compressed,etch_lz_output,expanded))return 0;
+        if(decoded==0u && (expanded<18u ||
+            etch_lz_output[0]!=0x04u || etch_lz_output[1]!=0x88u ||
+            !ota_memeq(etch_lz_output+2,(const uint8_t*)"FELUCCA-LOADER-1",16u)))return 0;
+        crc=ota_crc16(etch_lz_output,expanded,crc);
+        decoded+=expanded;pos+=compressed;
+        ota_idle();
+    }
+    (void)buf;
+    return pos==length && decoded==want && crc==ota_rd16(inner+2);
+}
+
+/* A foreign loader is never run. Its container still needs a self-consistent
+ * CRC so truncated/corrupted OTA payloads cannot proceed. No flash erase yet. */
+static int etch_host_loader_crc(uint32_t off,uint32_t len,uint32_t expected,uint8_t *buf){
+ uint32_t i=0,n,c=0;
+ while(i<len){n=len-i;if(n>512u)n=512u;
+  if(ota_read(off+i,buf,n))return 0;
+  c=ota_crc16(buf,n,c);i+=n;ota_idle();
+ }
+ return c==expected;
+}
+static int ota_stage(void)                       /* steps 1..6; 0 = host said success */
 {
     static uint8_t hdr[0x400] __attribute__((section(".pool")));
     static uint8_t b[512] __attribute__((section(".pool")));
     static uint8_t mine[512] __attribute__((section(".pool")));
-    uint32_t i,n,ota_off,ota_len,fl_off,fl_len,len,c,outer_dcrc;
+    uint32_t i, n, ota_off, ota_len, fl_off, fl_len, c, len, incoming_crc;
+    uint32_t flash_crc_expected,loader_crc_expected,stage_len;
+    const uint8_t *pinned_digest;
+    int is_stock;
     int rc;
-    uint8_t official_stock_restore=0, use_family_loader=0;
-    ota_show(1,0);
-    b1_staged_foreign_loader=0u;
-    if((rc=ota_ufw(hdr,&fl_off,&fl_len,&ota_off,&ota_len))!=0)return rc;
-    if((rc=b1_ota_verify_payload(fl_off,fl_len,ota_file_crc[0],b))!=0)return rc;
-    if((rc=b1_ota_verify_payload(ota_off,ota_len,ota_file_crc[1],b))!=0)return rc;
-    /* Validate both levels of the foreign loader wrapper but do NOT run it. */
-    if(ota_read(ota_off,b,64u))return -6;
-    len=ota_rd32(b+8);
-    outer_dcrc=ota_rd16(b+2);
-    if(ota_crc16(b+2,30,0)!=ota_rd16(b) ||
-       ota_crc16(b+34,30,0)!=ota_rd16(b+32) ||
-       !ota_memeq(b+16,(const uint8_t *)"usb_hid_ota.bin",15) ||
-       !ota_memeq(b+48,(const uint8_t *)"usb_hid_ota.bin",15) ||
-       ota_rd32(b+4)!=0x20u || ota_len!=len+0x20u ||
-       ota_rd32(b+32+8)!=0x01C0A800u) return -7;
-    /* Only exact, audited original V15 flash may use the full-flash writer.
-     * Unrecognized full-flash images NEVER get this code path. */
-    if(len==OTA_LDR_LEN && ota_rd16(b)==OTA_LDR_HCRC &&
-       ota_rd16(b+2)==OTA_LDR_DCRC && etch_ota_stock(fl_off,b)) {
-        official_stock_restore=1u;
-    } else {
-        /* APP_ONLY requires valid chip layout and fully decoded app CRC.
-         * A foreign boot header does not matter because this loader does
-         * not write 0x0000..0x3FFF. */
-        if((rc=b1_ota_app_layout(fl_off,b))!=0)return rc;
-        if((rc=b1_ota_compatible_loader(ota_off,len,outer_dcrc,b))!=0)return rc;
-        /* Keep the original, proven loader for its identical input bytes.
-         * A differently compiled, structurally compatible Felucca loader
-         * is staged from the verified incoming package, as in BEETLE's
-         * cross-firmware path. The Hub is responsible for SHA-256 pinning. */
-        use_family_loader=(len!=ETCH_OTA_BODY_LEN)||!etch_ota_hash(ota_off+32u,b,1);
-        if(!use_family_loader)len=ETCH_OTA_BODY_LEN;
-        b1_staged_foreign_loader=use_family_loader;
+    /* 1. UFW header + entry list */
+    ota_show(1, 0);
+    if ((rc = ota_ufw(hdr, &fl_off, &fl_len, &ota_off, &ota_len)) != 0)
+        return rc;
+    if (fl_off < 0x400u || fl_len != 0x93000u || fl_off > 0x200000u-fl_len || ota_off < fl_off+fl_len || ota_len < 512u || ota_len > OTA_AREA_LEN || ota_off > 0x200000u-ota_len)
+        return -3;
+    /* Take independently CRC-protected entry digests from the decrypted list.
+     * Both payloads must be entirely readable and intact. */
+    flash_crc_expected=0;loader_crc_expected=0;
+    for(i=0;i<ota_rd16(hdr+8);i++){
+        const uint8_t *e=hdr+0x40u+i*0x50u;
+        if(ota_rd16(e)==0)flash_crc_expected=ota_rd16(e+4);
+        if(ota_rd16(e)==100)loader_crc_expected=ota_rd16(e+4);
     }
+    if(ETCH_TEST_RESTORE_ONLY&&!etch_ota_stock(fl_off,b))return -20;
+    /* 2. which loader: the official one (known CRCs; it rewrites the whole flash.bin
+     *    including the head) or Felucca's own (app area only, checks the chip key) */
+    if (ota_read(ota_off, b, 512))
+        return -6;
+    len = ota_rd32(b + 8);
+    if (ota_crc16(b + 2, 30, 0) != ota_rd16(b) || ota_rd32(b + 4) != 0x20u || b[12] != 0x41u ||
+        !ota_memeq(b + 16,(const uint8_t*)"usb_hid_ota.bin",15u) ||
+        ota_len != len + 0x20u || len > OTA_AREA_LEN - 0x200u || ota_crc16(b + 0x22, 30, 0) != ota_rd16(b + 0x20) ||
+        ota_rd32(b + 0x20 + 8) != 0x01C0A800u)
+        return -7;
+    /* Stock is a full-flash write; it MUST match the exact pinned original.
+     * Every other accepted package is installed using our built-in trusted
+     * app-only loader, never the executable body supplied by the host. */
+    /* Length alone cannot label a third-party loader as stock: classify as
+     * FULL_FLASH only when the loader matches the known vendor SHA-256.
+     * An equally-sized community loader must still pass APP_ONLY checks. */
+    is_stock=(len==ETCH_STOCK_OTA_BODY_LEN &&
+              etch_ota_hash_pinned(ota_off+32,b,1,len,etch_stock_ota_digest));
+    /* Only the pinned official V15 may use the eight-entry vendor format.
+     * Never misclassify an unknown vendor V16 full-flash image as app-only. */
+    if(ota_rd16(hdr+8u)==8u && !is_stock)return -20;
+    incoming_crc=ota_rd16(b+2);
+    /* Verify the entire OTA archive entry and entire flash.bin BEFORE staging. */
+    if(!etch_host_loader_crc(ota_off,ota_len,loader_crc_expected,b))return -16;
+    if(!etch_host_flash_integrity(fl_off,fl_len,flash_crc_expected,b))return -22;
+    if(is_stock){
+        pinned_digest=etch_stock_ota_digest;
+        if(!etch_ota_hash_pinned(ota_off+32,b,1,len,pinned_digest))return -16;
+        if(!etch_ota_stock(fl_off,b))return -20;
+        /* Distinguish V15's signed package from an FM1 with a different
+         * installed bootheader; the former alone does not make a full-flash
+         * downgrade safe. No staging or erase before this comparison. */
+        if(!etch_stock_boot_head_matches(fl_off,b,mine))return -5;
+    }else{
+        if(!etch_host_loader_crc(ota_off+32,len,incoming_crc,b) ||
+           !etch_host_loader_compatible(ota_off+32,len,b))return -16;
+        if(!etch_host_app_compatible(fl_off,b))return -21;
+        /* The staged executable is ALWAYS ETCH's pinned app-only loader;
+         * its already-tested USB identity stays ota-FM-1_015. Do NOT
+         * mislabel its interface as Felucca's 900 loader. Host software must
+         * discover the actual identity after the reboot. */
+        pinned_digest=etch_ota_digest;
+    }
+    stage_len = is_stock ? len : ETCH_OTA_BODY_LEN;
     ota_show(2,0);
+    /* The package's boot header is irrelevant to the verified app-only
+     * writer, which cannot overwrite 0x0000..0x3fff. Full flash is allowed
+     * ONLY for the exact official V15 image with its pinned stock loader. */
     if(!etch_ota_available(b))return -15;
-    ota_show(3,0);
+    /* 4. stage the package's loader: erase, body, verify, head last */
+    ota_show(3, 0);
+    if (ota_read(ota_off, b, 512))
+        return -6;
+    c = is_stock ? ota_rd16(b + 2) : ota_crc16(etch_trusted_app_loader,ETCH_OTA_BODY_LEN,0);
     ota_touched=1;
-    for(i=0;i<OTA_AREA_LEN;i+=0x1000u)if(ota_erase(OTA_AREA+i))return -8;
-    if(ota_prog(ETCH_OTA_OWNER,etch_ota_owner,16)||
-       ota_fread(ETCH_OTA_OWNER,mine,16)||
-       !ota_memeq(mine,etch_ota_owner,16))return -10;
-    /* Stage original trusted B1 loader for known APP_ONLY packages, the
-     * fully validated incoming Felucca-family loader for transitions, or
-     * the exact pinned original V15 loader on the FULL_FLASH restore path.
-     * Never use an unknown loader family or a failed CRC. */
-    c=0;
-    for(i=0;i<len;i+=n){
-        n=len-i;if(n>512u)n=512u;
-        if(official_stock_restore || use_family_loader){
-            if(ota_read(ota_off+32u+i,b,n))return -9;
-        }else{
-            for(uint32_t j=0;j<n;j++)b[j]=b1_trusted_loader[i+j];
-        }
-        c=ota_crc16(b,n,c);
-        if(ota_prog(OTA_AREA+32u+i,b,n))return -10;
-    }
+    for (i = 0; i < OTA_AREA_LEN; i += 0x1000u)
+        if (ota_erase(OTA_AREA + i))
+            return -8;
+    if(ota_prog(ETCH_OTA_OWNER,etch_ota_owner,16)||ota_fread(ETCH_OTA_OWNER,mine,16)||!ota_memeq(mine,etch_ota_owner,16))return -10;
     {
-        uint32_t staged_crc = 0;
-        for(i=0;i<len;i+=n){
-            n=len-i;if(n>512u)n=512u;
-            if(ota_fread(OTA_AREA+32u+i,b,n))return -11;
-            staged_crc=ota_crc16(b,n,staged_crc);
-            if(!official_stock_restore && !use_family_loader && !ota_memeq(b,b1_trusted_loader+i,n))return -18;
+        uint32_t crc = 0;
+        for (i = 0; i < stage_len; i += n) {
+            ota_idle();
+            if(ota_aborted() || (ota_deadline && (int32_t)(ota_now_ms()-ota_deadline)>=0))return -1;
+            n = stage_len - i > 512u ? 512u : stage_len - i;
+            if(is_stock){
+                if (ota_read(ota_off + 0x20u + i, b, n))return -9;
+            }else{
+                for(uint32_t j=0;j<n;j++)b[j]=etch_trusted_app_loader[i+j];
+            }
+            crc = ota_crc16(b, n, crc);
+            if (ota_prog(OTA_AREA + 32u + i, b, n))
+                return -10;
+            /* A real progress fraction of the trusted loader staging write.
+             * This is NOT the separate OTA loader's subsequent app flash. */
+            ota_progress_update(i+n,stage_len);
         }
-        /* Not only the transmitted bytes, but the actual staged flash must
-         * match their CRC before writing the commit record. */
-        if(staged_crc!=c || ((official_stock_restore || use_family_loader) && c!=outer_dcrc))return -11;
+        if (crc != c)
+            return -11;
+        for (i = 0, crc = 0; i < stage_len; i += n) {             /* read back from flash */
+            n = stage_len - i > 512u ? 512u : stage_len - i;
+            if (ota_fread(OTA_AREA + 32u + i, b, n))
+                return -11;
+            crc = ota_crc16(b, n, crc);
+        }
+        if (crc != c)
+            return -11;
     }
-    if(ota_stage_head(len))return -12;
-    ota_show(4,0);
-    for(i=0;i<4u;i++)if(!ota_read(0xE0000000u,b,8) &&
-       ota_memeq(b,(const uint8_t *)"success",8))return 0;
+    if(!etch_ota_hash_pinned(OTA_AREA+32,b,0,stage_len,pinned_digest))return -16;
+    if (ota_stage_head(stage_len))
+        return -12;
+    /* 6. the host confirms: nothing is committed without it */
+    ota_show(4, 0);
+    for (i = 0; i < 4u; i++)
+        if (!ota_read(0xE0000000u, b, 8) && ota_memeq(b, (const uint8_t *)"success", 8))
+            return 0;
     return -13;
 }
 
@@ -558,7 +742,7 @@ static int ota_session(void)
     uint32_t i;
     int rc;
     ota_touched=0;
-    ota_deadline = ota_now_ms() + 300000u;          /* step 1 normally takes ~5 s; a stalled host gives up after 2 min */
+    ota_deadline = ota_now_ms() + 480000u;          /* Exact stock V15 flash digest reads 1,176 blocks; allow bounded 4 min */
     rc = ota_stage();
     if (rc) {
         if(ota_unstage())rc=-17;
@@ -571,11 +755,8 @@ static int ota_session(void)
     ota_wr16(parm + 2, 0x5A0Du);
     ota_wr16(parm + 4, 0x5A01u);
     ota_wr16(parm + 6, 0x5441u);
-    {
-        const char *loader_id = b1_staged_foreign_loader ? "ota-FM-1_900" : "ota-FM-1_015";
-        for (i = 0; loader_id[i] && i < 27u; i++)
-            parm[8u + i] = (uint8_t)loader_id[i];
-    } /* loader identity, NEVER replace the running B1 package ID */
+    for (i = 0; i < 12u; i++)
+        parm[8 + i] = (uint8_t)"ota-FM-1_015"[i];    /* the loader's own USB identity */
     ota_wr32(parm + 72, OTA_AREA);
     ota_wr16(parm, ota_crc16(parm + 2, 78, 0));
 #if FELUCCA_OTA_DRYRUN

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * SikkenWorks B1 V5.2: phase-continuous shared-wheel acceleration with Smart Idle.
+ * SikkenWorks B1 V5.4: phase-continuous shared-wheel acceleration with Smart Idle.
  * This is original DSP informed by published Hammond service explanations.
  * NOT a sampled Hammond, not a perfect circuit-level model; verify by listening.
  * All work in audio callback is bounded, fixed-point, allocation-free.
@@ -646,6 +646,23 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
   }
   for(uint32_t j=0;j<B1_VOICES;j++)if(e->voice[j].active){
    const struct b1_voice *v=&e->voice[j];
+   /* No interpolation error during attack / release / key click. */
+   /* With KEY CLICK=0, all contacts have settled after 12 samples,
+    * so the sustained fast path can start ~0.7ms after a new chord.
+    * With click enabled retain the full 130-sample transient window. */
+   uint16_t contact_settled=(uint16_t)(e->click?130u:13u);
+   if(v->releasing || v->envelope!=32767u || v->age<contact_settled){fast_mix=0u;break;}
+   ++steady_voices;
+  }
+  if(steady_voices<3u)fast_mix=0u;
+ }
+ if(fast_mix){
+  for(uint32_t w=0;w<B1_TONEWHEELS;w++){
+   e->mixed_wheel_gain[w]=0;
+   e->mixed_wheel_leak[w]=0u;
+  }
+  for(uint32_t j=0;j<B1_VOICES;j++)if(e->voice[j].active){
+   const struct b1_voice *v=&e->voice[j];
    for(uint32_t h=0;h<B1_HARMONICS;h++){
     if(v->bank==0u && h==8u && e->percussion_enabled)continue;
     e->mixed_wheel_gain[v->wheel[h]]+=(int32_t)pull_q8[e->drawbars[v->bank][h]];
@@ -787,6 +804,10 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
  uint32_t drum_target=drum_nominal*horn_pct*drum_pct/10000u;
  const struct b1_block_fx block_fx=b1_prepare_fx(e);
  const struct b1_block_amp block_amp=b1_prepare_amp(e);
+ /* V5.4: controls are constant for this render call. Avoid redeciding
+  * oscillator target and the contact fade window for every audio sample. */
+ const uint16_t block_osc_target=e->osc_mode==B1_OSC_SAW?32767u:0u;
+ const uint16_t contact_fade_window=e->click?38u:13u;
  const uint32_t scanner_type=e->cv_mode?((e->cv_mode-1u)%3u):0u;
  const int32_t scanner_depth_q8=(int32_t)(12u+scanner_type*7u)*(int32_t)e->cv_depth*256/100;
  const int32_t rotor_width_100=20+(int32_t)e->rotor_width*70/100;
@@ -810,11 +831,10 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
  for(uint32_t t=0;t<frames;t++){
   /* Smooth oscillator-mode switching without resetting playing notes or
    * 91 shared wheel phases. Zero overhead in the settled ORGAN state. */
-  uint16_t osc_target=e->osc_mode==B1_OSC_SAW?32767u:0u;
-  if(e->osc_blend_q15<osc_target){
+  if(e->osc_blend_q15<block_osc_target){
    uint32_t v=(uint32_t)e->osc_blend_q15+128u;
-   e->osc_blend_q15=(uint16_t)(v>osc_target?osc_target:v);
-  }else if(e->osc_blend_q15>osc_target){
+   e->osc_blend_q15=(uint16_t)(v>block_osc_target?block_osc_target:v);
+  }else if(e->osc_blend_q15>block_osc_target){
    e->osc_blend_q15=(uint16_t)(e->osc_blend_q15>128u?e->osc_blend_q15-128u:0u);
   }
   /* A 32-bit timebase wraps after ~27 h. Wrap resets stamps only, never
@@ -929,7 +949,7 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
     /* Calculate contact timing only during the short attack. Most normal
      * playback is CLICK=0 with settled voices: save two divisions, modulo
      * and several multiplies per harmonic per voice per sample. */
-    if(v->age<38u){
+    if(v->age<contact_fade_window){
      int32_t contact=(int32_t)v->age;
      if(e->click){
       contact-=(int32_t)contact_delay[vi][h];

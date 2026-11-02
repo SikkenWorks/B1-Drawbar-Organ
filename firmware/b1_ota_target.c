@@ -1,8 +1,18 @@
 /* GPL-3.0-only. B1 hardware OTA adapter based on Felucca / BEETLE. */
 /* This file is included after ota.c from b1_main.c. */
-static uint32_t ota_now_ms(void){return b1_ms;}
+/* Independent of TIMER5 frequency and time spent with interrupts masked. */
+static uint32_t ota_clock_ticks,ota_clock_rem,ota_clock_ms;
+static uint32_t ota_now_ms(void){
+ uint32_t now=fm1_ticks(),delta=now-ota_clock_ticks;ota_clock_ticks=now;
+ ota_clock_ms+=delta/24000u;ota_clock_rem+=delta%24000u;
+ if(ota_clock_rem>=24000u){ota_clock_rem-=24000u;++ota_clock_ms;}
+ return ota_clock_ms;
+}
 static int ota_aborted(void){return usb.uboot_req || (fm1_in.buttons & 3u)==3u;}
-static void ota_idle(void){fm1_wdt_feed();usb_poll();}
+/* TIMER5 exclusively owns USB SIE access, including during OTA.
+ * Polling it again here could interrupt an in-progress register transaction. */
+static void ota_idle(void){fm1_wdt_feed();}
+static void ota_progress_update(uint32_t done,uint32_t total){(void)done;(void)total;}
 static int ota_erase(uint32_t off){
  if(!b1_updating || !FL_IN(off,4096u,OTA_AREA,OTA_AREA+OTA_AREA_LEN) || (off&4095u))return -8;
  uint32_t took;fm1_irq_off();int r=FL_FAR(fl_erase4k_ram)(off,&took);fm1_irq_enable_all();fm1_wdt_feed();return r;

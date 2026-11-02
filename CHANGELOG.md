@@ -1,3 +1,35 @@
+## V5.6
+- Port the production OTA core and pinned app-only loader from RUPTURE V1.52.
+- Accept the exact original V15 eight-entry directory, including empty info.log
+  and offsets aligned according to each entry padding rather than 256 bytes.
+- Decode and validate compressed Felucca loader blocks before accepting them.
+- Always stage the built-in audited loader for compatible community packages.
+- Recognize bounded residual LOADER.BIN without requiring a commit record that
+  the previous loader may have erased after installation.
+- Keep B1/BEETLE owner tokens compatible with prior staging attempts.
+- Use the hardware clock and a bounded eight-minute session deadline.
+- Keep USB polling in TIMER5 to avoid main-loop/interrupt SIE reentry.
+- Retain product ID FM-1_481026 and the protected boot region.
+- 17 native protocol replay cases pass; hardware validation remains outstanding.
+
+## V5.5 — Restore The Firmware Hub cross-firmware + official V15 CHECK support (2026-11-02)
+
+- Fix confirmed native `ota_ufw` regression: the updater previously recognized only two-entry community `.fwsc` UFWs, rejecting the **eight-entry original M-VAVE V15** at CHECK before the OTA loader transition.
+- Validate both explicit UFW families with strict entry bounds, CRCs and nonoverlapping ranges. Eight-entry vendor layout also checks all eight payloads, an independently published V15 app-region SHA-256 and the **complete original V15 `.fwsc` SHA-256** reconstructed from the host's logical packet stream. No wildcard full-flash authorization.
+- Keep the approved loader, staging, readback, `success` acknowledgement and OTA record unchanged. Preserve permanent `FM-1_481026` identity, AUTO SAVE OFF default, 12 project slots and bit-exact audio.
+- New native 8-entry synthetic OTA positive/negative regressions and optional original-V15 replay tool. No claim that genuine V15 or on-device The Firmware Hub A→B→A has been tested yet.
+
+## V5.4 — Safer cross-firmware OTA retry and lossless transient improvement (2026-11-02)
+
+- **Keep B1 identity `FM-1_481026`** in application USB-MIDI, `.fwsc` and WebInstaller, preserve opt-in AUTO SAVE (default OFF) and all prior projects/patches.
+- **Native OTA staging ownership:** previously a nonblank stage with a valid differently compiled Felucca-family loader could trigger `-15` and prevent switching away. Recognize that **existing reserved OTA staging** only when a valid JLFS LOADER.BIN header, known loader family and CRC-validated pending update record all match. Unknown or damaged data still cause `-15` and zero erases. No change to unrelated data sectors.
+- **Native APP_ONLY compatibility:** allow incoming app directory slots below B1's own padded app size, but no larger than the existing safe app flash region; verify the actual declared slot length and its full calculated SFC-decrypted CRC. Fix an initially discovered bug where verification still used the old fixed length. Preserve chip key (`0x980F`), XIP (`0x02000120`), app flash base (`0x4000`), UFW checksums and the protected boot region.
+- **Audio losslessness:** hoist oscillator target and click contact window from the PCM loop; when CLICK=0, avoid already-expired attack contact calculations. No change to tonewheel/voice count, filters, limiter, amplifier or rendered samples. A more aggressive nine-drawbar caching experiment regressed in host benchmarks and was **not included**.
+- **Verification:** real JieLi pi32v2 compile and packed UFW, byte-identical PCM **and full DSP state** across the reference scenarios, 16 host-native OTA CHECK replays plus staged-loader retry/readback/CRC-negative cases; synthetic shortened-app fixture verified. OTA host emulation does **not** prove actual device handoff/flash success.
+- **Stock V15:** retain prior strictly verified single-package vendor restore validation (no wildcard); actual stock V15 return from running V5.4 not physically confirmed.
+- **Stock V16:** not enabled and **not claimed compatible**, because the genuine original V16 package and loader/flash map were not available for native replay and physical validation. The Firmware Hub's stock catalog cannot be changed by B1's code.
+- **Known hardware limitations:** multiple drawbars/voices may still exceed FM1 CPU/DMA budget or cause analog/digital overload; no FM1 `PEAK`/`DMA MISSES` measurement is available. No claim of fully fixed crackling or universal firmware switching. Do not flash unknown V16/foreign-loader images through this updater.
+
 ## V5.3 — Optional AUTO SAVE in the SAVE menu (2026-11-02)
 
 - **AUTO SAVE defaults to OFF** on new installations and for existing V5.2/V4.9 journals. Old live snapshots are not silently restored while OFF.

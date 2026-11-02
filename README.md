@@ -1,3 +1,27 @@
+# B1 V5.6: RUPTURE OTA repair
+
+Use build/SikkenWorks-B1-V5.6.fwsc or B1-WebInstaller.html.
+The product identity remains FM-1_481026. DSP, UI and project storage are unchanged.
+
+If the installed B1 refuses even this update, a new package cannot repair code
+already running on the device. Switch off, hold OCT-minus, then switch on to enter
+the existing FM1 bootloader. Use the compatible FM1 installer for that mode.
+The web installer requires a compatible USB-MIDI interface; it cannot replace
+an unavailable bootloader driver. REC-at-boot is an additional silent retry mode,
+but it still runs the old updater and may encounter the same validation defect.
+
+After installing V5.6, test a V5.6 self-update first, then the desired Hub firmware.
+
+Build: JIELI_TOOLCHAIN=/absolute/path/to/jieli python3 tools/build_v56_release.py
+OTA replay: python3 tests/run_ota_v56.py
+Installer validation: node tests/test_installer_v56.cjs
+
+The 17 host simulations pass, including original V15, B1, BEETLE and RUPTURE.
+This release has NOT been flashed or tested on physical hardware here.
+
+---
+Previous release documentation follows for historical reference.
+
 <div align="center">
 
 <img src="B1.gif" alt="B1 drawbar organ on the M-VAVE FM-1" width="240">
@@ -34,9 +58,15 @@ B1 has two sound engines: the original **SINE / ORGAN** tonewheels and an experi
 
 ## Audio stability and diagnostics
 
-B1 uses 91 shared, phase-continuous tonewheels and up to 12 software voices. It evaluates only the wheels needed for the sounding notes, reuses common wheel samples and combines shared harmonics on steady chords. **V5.3** retains the V5.2 Leslie/ROCK optimizations and adds a persistent AUTO SAVE switch in the SAVE menu. **V5.2** retains the V5.1 SAFE/ORGAN acceleration and reuses Leslie lookup values while adding exact bounded ROCK arithmetic. V5.1 accelerated the settled SAFE/ORGAN mixer and its transient wheel prefetch using exact sine-table lookups; sound and DSP state match V5.0 bit-for-bit in native host regression tests. A linked input/output peak guard maintains digital headroom without applying a permanent compressor to every normal sample. All original organ and effect controls remain available.
+B1 uses 91 shared, phase-continuous tonewheels and up to 12 software voices. It evaluates only the wheels needed for the sounding notes, reuses common wheel samples and combines shared harmonics on steady chords. **V5.4** retains the V5.3 opt-in AUTO SAVE switch (default OFF) and optimizes the note-on contact path without changing rendered samples in native reference tests. Native OTA CHECK now accepts separately verified shorter compatible application slots and can re-use a stage previously owned by a validated Felucca-family loader; unknown flash stays protected. Stock V16 is not verified or enabled without its original package. **V5.2** retains the V5.1 SAFE/ORGAN acceleration and reuses Leslie lookup values while adding exact bounded ROCK arithmetic. V5.1 accelerated the settled SAFE/ORGAN mixer and its transient wheel prefetch using exact sine-table lookups; sound and DSP state match V5.0 bit-for-bit in native host regression tests. A linked input/output peak guard maintains digital headroom without applying a permanent compressor to every normal sample. All original organ and effect controls remain available.
 
-For hardware timing diagnostics, open **SCL / SCALE** and press **SELECT** for **AUDIO DIAG**. Play repeated 3-, 6- and 12-note chords, and read **PEAK** (worst render time in microseconds) and **DMA MISSES** (missed buffer deadlines). Each 256-frame half-buffer has about **5,805 microseconds** at 44.1 kHz; the firmware's safety limit is 5,500 microseconds. If misses increase during chords, it is a realtime deadline problem, not necessarily digital clipping. An actual FM1 is required to establish the hardware result. B1 has been tested on physical FM1 hardware in earlier releases; the **V5.3** worst-case 12-voice timing and safe headroom are not yet hardware-certified. In a 12-voice test, aim for **zero DMA MISSES** and keep PEAK comfortably below the 5,500 µs hard deadline (ideally below 4,100 µs for roughly 25% margin).
+For hardware timing diagnostics, open **SCL / SCALE** and press **SELECT** for **AUDIO DIAG**. Play repeated 3-, 6- and 12-note chords, and read **PEAK** (worst render time in microseconds) and **DMA MISSES** (missed buffer deadlines). Each 256-frame half-buffer has about **5,805 microseconds** at 44.1 kHz; the firmware's safety limit is 5,500 microseconds. If misses increase during chords, it is a realtime deadline problem, not necessarily digital clipping. An actual FM1 is required to establish the hardware result. B1 has been tested on physical FM1 hardware in earlier releases; the **V5.4** worst-case 12-voice timing and safe headroom are not yet hardware-certified. In a 12-voice test, aim for **zero DMA MISSES** and keep PEAK comfortably below the 5,500 µs hard deadline (ideally below 4,100 µs for roughly 25% margin).
+
+## Firmware Hub and stock recovery status (V5.4)
+
+B1 reports the **permanent** `FM-1_481026` application identity (not the temporary `ota-FM-1_015` or a BEETLE identity). The native updater performs CHECK against the actual incoming firmware, validates app/loader CRCs before erasing reserved OTA staging, waits for the host's eight-byte `success` confirmation, then commits. The existing strict, byte-verified original **V15** restore branch is retained; it has **not** been proven end-to-end on a physical FM1 from B1 V5.4. Original stock **V16**, `FM-1_016`, uses a different vendor firmware package and has **not** been added as an unverified full-flash bypass: its genuine package and destination layout must be independently validated before V16 recovery can be declared supported. The Hub's available stock destinations are also controlled by the Hub operator, not by this repository. **Never assume that any stock image can safely be flashed from any custom firmware.**
+
+Earlier B1 releases have been installed and tested on a real FM1, including reports of crackling and cross-firmware failures. **The V5.5 OTA changes have not yet been physically tested**. Host protocol replays do not certify safe stock V15/V16 recovery or a two-way Firmware Hub transition. Keep an independent recovery route available and export projects before changing firmware. For vendor firmware use the official M-VAVE download and follow the vendor recovery instructions when B1's updater cannot verify it.
 
 ## How to use it
 
