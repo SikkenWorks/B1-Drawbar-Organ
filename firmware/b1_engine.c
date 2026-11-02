@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * SikkenWorks B1 V4.5: phase-continuous shared-wheel acceleration with Smart Idle.
+ * SikkenWorks B1 V5.0: phase-continuous shared-wheel acceleration with Smart Idle.
  * This is original DSP informed by published Hammond service explanations.
  * NOT a sampled Hammond, not a perfect circuit-level model; verify by listening.
  * All work in audio callback is bounded, fixed-point, allocation-free.
@@ -669,6 +669,10 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
  uint8_t voice_bar_count[B1_VOICES];
  uint8_t voice_bar_index[B1_VOICES][B1_HARMONICS];
  uint8_t contact_delay[B1_VOICES][B1_HARMONICS];
+  /* V5.0: one 3x9 Q8 gain table per 16-frame smoothing tick, rather
+   * than a Q16 load/shift for every voice/harmonic/sample. Source-state
+   * ramp and all audible calculations are otherwise unchanged. */
+  uint16_t smooth_gain[B1_BANKS][B1_HARMONICS];
  if(!fast_mix){
   uint32_t click_curve=((uint32_t)e->click*e->click+50u)/100u;
   for(uint32_t v=0u;v<B1_VOICES;v++)if(e->voice[v].active){
@@ -686,7 +690,55 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    voice_bar_count[k]=count;
   }
  }
- /* Registration-aware headroom, BEFORE any clip/amp stages. All drawbar
+
+  /* V5.0: the transient voice mixer (attacks/releases/gestures) formerly
+   * tested the per-wheel memo stamp for every voice/harmonic, even where
+   * multiple keys share one wheel. Build a sparse, unique wheel work-list
+   * once per PCM block and render exactly those wheels once per sample.
+   * Only enable if each voice survives the whole block. Otherwise the old
+   * lazy path must decide per-sample which wheel was actually evaluated.
+   * All 91 wheel phases remain free-running via the existing lazy clock. */
+  uint8_t transient_wheels[B1_TONEWHEELS],transient_count=0u;
+  uint8_t transient_direct=0u;
+  if(!fast_mix && voiced_count>=3u && frames && frames<=4096u){
+   transient_direct=1u;
+   for(uint32_t vi=0u;vi<voiced_count;vi++){
+    const struct b1_voice *v=&e->voice[voiced_idx[vi]];
+    if(v->releasing && (uint32_t)v->envelope <= frames*256u){
+     transient_direct=0u;break;
+    }
+   }
+   if(transient_direct){
+    uint32_t seen[3]={0u,0u,0u}; /* 91 wheels, zero heap. */
+    for(uint32_t vi=0u;vi<voiced_count;vi++){
+     const struct b1_voice *v=&e->voice[voiced_idx[vi]];
+     for(uint32_t hi=0u;hi<voice_bar_count[vi];hi++){
+      uint8_t w=v->wheel[voice_bar_index[vi][hi]];
+      uint32_t bit=(uint32_t)1u<<(w&31u);
+      if(!(seen[w>>5]&bit)){
+       seen[w>>5]|=bit;transient_wheels[transient_count++]=w;
+      }
+     }
+     if(e->leakage){
+      uint8_t w=v->leakage_wheel;
+      uint32_t bit=(uint32_t)1u<<(w&31u);
+      if(!(seen[w>>5]&bit)){
+       seen[w>>5]|=bit;transient_wheels[transient_count++]=w;
+      }
+     }
+    }
+    /* The prefetched route is profitable only with substantial harmonic
+     * sharing. For light chords the ordinary lazy cache is cheaper. */
+    uint32_t terms=0u;
+    for(uint32_t vi=0u;vi<voiced_count;vi++)
+     terms+=(uint32_t)voice_bar_count[vi]+(e->leakage?1u:0u);
+    if(terms<(uint32_t)transient_count+8u)
+     transient_direct=0u;
+   }
+  }
+  /* Precomputing wheels must not change the per-voice processing order,
+   * contact stagger, envelope updates, or serialized project state. */
+  /* Registration-aware headroom, BEFORE any clip/amp stages. All drawbar
   * footages plus the full 12-note chord are counted once per DMA block.
   * Prevent the hard square/flat-top that V2.1 produced when summing many
   * wide-open manuals then slamming the limiter. No divisions per sample. */
@@ -753,6 +805,11 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
   if(!fast_mix && (t&15u)==0u)for(uint32_t b=0;b<B1_BANKS;b++)for(uint32_t h=0;h<9u;h++){
    uint32_t dest=(uint32_t)pull_q8[e->drawbars[b][h]]<<8;
    e->pull_smooth_q16[b][h]=ramp(e->pull_smooth_q16[b][h],dest,5u);
+   smooth_gain[b][h]=(uint16_t)(e->pull_smooth_q16[b][h]>>8);
+  }
+  if(transient_direct){
+   for(uint32_t j=0u;j<transient_count;j++)
+    (void)shared_wheel_sample(e,transient_wheels[j]);
   }
   int32_t mix=0;
   uint8_t sounding_now=0u;
@@ -787,7 +844,7 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
     uint32_t h=voice_bar_index[vi][hi];
     /* drawbar level comes from the unchanged smoothed Q16 term below */
     uint8_t wheel=v->wheel[h];
-    int32_t tone=shared_wheel_sample(e,wheel);
+    int32_t tone=transient_direct?e->wheel_value[wheel]:shared_wheel_sample(e,wheel);
     /* Contact staggering: each of nine busbars closes on its own sample. */
     /* K3 CLICK controls both contact timing and key-transient level.
      * Important: signed noise / signed denominator. A prior unsigned `u`
@@ -807,7 +864,7 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
      if(contact<=0)continue;
      if(contact<12)tone=tone*contact/12;
     }
-    sum+=tone*(int32_t)(e->pull_smooth_q16[v->bank][h]>>8);
+    sum+=tone*(int32_t)smooth_gain[v->bank][h];
    }
    sum/=4096; /* 9 full pulls -> maximum ~18k per key before bus saturation */
    if(e->click && v->age<130u){
@@ -823,7 +880,7 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    }
    if(e->leakage){
     uint8_t w=v->leakage_wheel;
-    int32_t tone=shared_wheel_sample(e,w);
+    int32_t tone=transient_direct?e->wheel_value[w]:shared_wheel_sample(e,w);
     sum+=tone*(int32_t)e->leakage/2700;
    }
    if(v->age<65535u)++v->age;
@@ -857,8 +914,15 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
     * existing registration and input guards handle large organ chords. */
    mix+=b1_percussion_bus_exact(percussion_bus,e->percussion_env);
    /* Preserve original mono capacitor discharge and no legato retrigger. */
-   uint32_t drop=(e->percussion_env+9999u)/10000u;
-   e->percussion_env=e->percussion_env>drop?e->percussion_env-drop:0u;
+   /* V5.0: percussion_env starts at 32767 and only decreases. In this
+    * musical range ceil(env/10000) is exactly a 4-way compare. Avoid a
+    * potentially emulated integer divide in every polyphonic sample.
+    * Preserve the full original formula for abnormal imported/test states. */
+   uint32_t env=e->percussion_env;
+   uint32_t drop=env<=32767u ?
+      (env>30000u?4u:env>20000u?3u:env>10000u?2u:1u) :
+      (env+9999u)/10000u;
+   e->percussion_env=env>drop?env-drop:0u;
   }
   /* True electronic Hammond keying: a free-running wheel is NEVER
    * automatically routed to the DAC. A short, bounded fade closes the output

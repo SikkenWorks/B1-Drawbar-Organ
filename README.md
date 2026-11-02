@@ -32,6 +32,12 @@ B1 has two sound engines: the original **SINE / ORGAN** tonewheels and an experi
 | **Effects** | Scanner chorus/vibrato, rotary speaker, delay and reverb |
 | **Memory** | 12 named, persistent projects |
 
+## Audio stability and diagnostics
+
+B1 uses 91 shared, phase-continuous tonewheels and up to 12 software voices. It evaluates only the wheels needed for the sounding notes, reuses common wheel samples and combines shared harmonics on steady chords. A linked input/output peak guard maintains digital headroom without applying a permanent compressor to every normal sample. All original organ and effect controls remain available.
+
+For hardware timing diagnostics, open **SCL / SCALE** and press **SELECT** for **AUDIO DIAG**. Play repeated 3-, 6- and 12-note chords, and read **PEAK** (worst render time in microseconds) and **DMA MISSES** (missed buffer deadlines). Each 256-frame half-buffer has about **5,805 microseconds** at 44.1 kHz; the firmware's safety limit is 5,500 microseconds. If misses increase during chords, it is a realtime deadline problem, not necessarily digital clipping. An actual FM1 is required to establish the hardware result.
+
 ## How to use it
 
 ### 01 / Shape the organ with drawbars
@@ -170,7 +176,7 @@ When switching to other compatible FM1 software, use a reputable Firmware Hub or
 
 ## Installation
 
-The firmware is intended for the **M-VAVE FM-1** and **B1 has been installed and tested on real FM-1 hardware**, including booting and sound output. The repository contains a native-built `.fwsc` update package and a browser-based installer. Rebuild both together with `JIELI_TOOLCHAIN=/path/to/jieli-linux-toolchains-20250324.1 python3 tools/build_v49_release.py`. Cross-firmware OTA switching and recovery have not been verified for every third-party firmware.
+The firmware is intended for the **M-VAVE FM-1**. **A valid offline-built `.fwsc` is included, but hardware boot, sound and OTA updating still require an actual FM1 test.** The repository contains a freshly compiled update package and a browser-based installer. Rebuild both together with `JIELI_TOOLCHAIN=/path/to/jieli-linux-toolchains-20250324.1 python3 tools/build_v49_release.py`.
 
 | File / directory | Purpose |
 | :-- | :-- |
@@ -185,7 +191,7 @@ The firmware is intended for the **M-VAVE FM-1** and **B1 has been installed and
 
 Use **Chrome or Edge with WebMIDI** and follow the WebInstaller's device and firmware checks. The installer can validate compatible FM-1 `.fwsc` files that match B1's protected BEETLE boot-header and loader requirements. For a different firmware layout, **ENTER UBOOT** requests a handoff to the FM-1's independent update environment; the target firmware must then be installed with its own compatible installer. Neither path is a universal flasher.
 
-**Before installing:** back up your projects and keep an independent, tested recovery method. **B1 has been tested on a physical M-VAVE FM-1**, including firmware installation, startup and audio playback. This does **not** mean that switching to every other FM1 firmware, or recovering from an interrupted update, has been proven on hardware. Do not keep retrying a failed update, bypass the loader checks, or assume the included BEETLE reference is a universal recovery image.
+**Before installing:** back up your projects and keep an independent, tested recovery method. Firmware V4.4 has passed native compilation, offline packaging and software tests, **not** a successful flash, boot or rollback on a physical FM-1. The earlier on-device `OTA FAILED -16` report has not been proven resolved by physical testing. Do not keep retrying a failed update, bypass the loader checks, or assume the included BEETLE reference is a universal recovery image.
 
 ## Credits
 

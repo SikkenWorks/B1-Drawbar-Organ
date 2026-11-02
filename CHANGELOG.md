@@ -1,3 +1,14 @@
+## V5.0 — Lossless dynamic tonewheel and polyphonic DSP efficiency (2026-11-02)
+
+- Preserve **all 91 shared tonewheels, 12 voices, nine drawbars, three registrations, ORGAN/SAW, B3/ROCK, percussion, key click, leakage, scanner, Leslie, delay, reverb, MIDI and autosave**. No reduced sample rate, discarded oscillators or fixed voice limit.
+- **Dynamic transient oscillator work-list:** on sufficiently shared 3+ voice attack/release blocks, collect only the distinct tonewheels and compute each once per frame, reusing cached samples per voice/harmonic. If the overlap is too low or a voice will finish releasing in the block, use the original low-overhead lazy lookup. No change to note contact timing or tonewheel phase continuity.
+- **Per-block / 16-frame drawbar gain caching:** compute smoothed Q8 registration levels once per existing smoothing tick rather than read and shift the same Q16 coefficients for every active harmonic and sample.
+- **Exact percussion decay fast path:** replace a per-sample integer division by 10,000 with four comparisons for the actual 1–32767 envelope range; retain original general formula for exceptional states.
+- **Headroom and clipping:** retain the existing linked input/output peak-guard and registration-aware headroom. No audio compression or added saturation introduced. AUDIO DIAG still reports the measured peak render time and DMA misses.
+- **Native reference verification:** 96 1–12 voice PCM+entire-DSP-state reference scenarios and 128 added live transition scenarios exactly equal to V4.9; 72 clipping stress tests and 48 128/256-frame equivalence cases. A short native OTA replay accepts B1 V5.0 and original BEETLE RC1.01 through CHECK/`success`/staging/commit. The full extended 16-case OTA suite is retained but did not complete in the timed run.
+- **Identity remains `FM-1_481026`** in USB-MIDI and the `.fwsc`; native OTA code, staging/boot/recovery, storage, UI, MIDI and autosave unchanged from V4.9. The WebInstaller embeds this exact package and SHA-256.
+- **Hardware limitation:** real FM1 CPU utilization, DMA misses while playing, headphone/line-output clipping and Firmware Hub multi-firmware round trips remain to be measured. Host benchmarks were not sufficiently stable to claim a numerical realtime speedup or a confirmed crackle fix.
+
 ## V4.9 — Auto-save live parameters, OTA regression safeguards (2026-10-23)
 
 - **AUTO SAVE:** after 5 seconds without parameter edits, and after playback plus effects are fully silent, automatically persist the entire live project parameter snapshot in B1's existing dual-bank copy-on-write journal. At most one flash write per 60 seconds during editing; no erase/program during note playback. Restart restores the last live setup automatically.
