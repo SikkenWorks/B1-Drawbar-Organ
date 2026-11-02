@@ -1,8 +1,9 @@
-/* SikkenWorks B1 V4.9 (Cross-firmware native OTA and lossless polyphony; V4.5 DSP + Smart Idle + KEY ASSIGN intact). GPL-3.0-only, custom FM1 executable.
+/* SikkenWorks B1 V5.2 (native OTA, lossless polyphony, autosave and KEY ASSIGN preserved). GPL-3.0-only, custom FM1 executable.
  * Felucca platform HAL © Leo Kuroshita / Hügelton Instruments.
  * FLASH POLICY: OTA staging plus B1-owned, dynamically selected verified-safe two-sector journal.
  * BEETLE project data at 0x97000..0xDFFFF is never modified.
- * Firmware is untested on physical hardware; recovery outside the running app is unproven.
+ * Earlier B1 releases have been tested on physical FM1 hardware; the V5.2
+ * realtime headroom and cross-firmware hardware transitions remain unverified.
  */
 #include <stdint.h>
 #include "hal/fm1_cc.h"

@@ -34,9 +34,9 @@ B1 has two sound engines: the original **SINE / ORGAN** tonewheels and an experi
 
 ## Audio stability and diagnostics
 
-B1 uses 91 shared, phase-continuous tonewheels and up to 12 software voices. It evaluates only the wheels needed for the sounding notes, reuses common wheel samples and combines shared harmonics on steady chords. A linked input/output peak guard maintains digital headroom without applying a permanent compressor to every normal sample. All original organ and effect controls remain available.
+B1 uses 91 shared, phase-continuous tonewheels and up to 12 software voices. It evaluates only the wheels needed for the sounding notes, reuses common wheel samples and combines shared harmonics on steady chords. **V5.2** retains the V5.1 SAFE/ORGAN acceleration and reuses Leslie lookup values while adding exact bounded ROCK arithmetic. V5.1 accelerated the settled SAFE/ORGAN mixer and its transient wheel prefetch using exact sine-table lookups; sound and DSP state match V5.0 bit-for-bit in native host regression tests. A linked input/output peak guard maintains digital headroom without applying a permanent compressor to every normal sample. All original organ and effect controls remain available.
 
-For hardware timing diagnostics, open **SCL / SCALE** and press **SELECT** for **AUDIO DIAG**. Play repeated 3-, 6- and 12-note chords, and read **PEAK** (worst render time in microseconds) and **DMA MISSES** (missed buffer deadlines). Each 256-frame half-buffer has about **5,805 microseconds** at 44.1 kHz; the firmware's safety limit is 5,500 microseconds. If misses increase during chords, it is a realtime deadline problem, not necessarily digital clipping. An actual FM1 is required to establish the hardware result.
+For hardware timing diagnostics, open **SCL / SCALE** and press **SELECT** for **AUDIO DIAG**. Play repeated 3-, 6- and 12-note chords, and read **PEAK** (worst render time in microseconds) and **DMA MISSES** (missed buffer deadlines). Each 256-frame half-buffer has about **5,805 microseconds** at 44.1 kHz; the firmware's safety limit is 5,500 microseconds. If misses increase during chords, it is a realtime deadline problem, not necessarily digital clipping. An actual FM1 is required to establish the hardware result. B1 has been tested on physical FM1 hardware in earlier releases; the **V5.2** worst-case 12-voice timing and safe headroom are not yet hardware-certified. In a 12-voice test, aim for **zero DMA MISSES** and keep PEAK comfortably below the 5,500 µs hard deadline (ideally below 4,100 µs for roughly 25% margin).
 
 ## How to use it
 
@@ -212,3 +212,7 @@ B1 is released under **GPL-3.0-only**. The included Inter font is subject to its
 </div>
 
 
+
+
+### V5.2 performance note
+Leslie and ROCK optimization preserves previous integer audio output. Full 12-voice CPU headroom on a real M-VAVE FM1 is not verified by a host benchmark; check AUDIO DIAG under worst-case conditions before claiming crackle-free operation. The permanent firmware identity remains `FM-1_481026`.

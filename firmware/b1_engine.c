@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * SikkenWorks B1 V5.0: phase-continuous shared-wheel acceleration with Smart Idle.
+ * SikkenWorks B1 V5.2: phase-continuous shared-wheel acceleration with Smart Idle.
  * This is original DSP informed by published Hammond service explanations.
  * NOT a sampled Hammond, not a perfect circuit-level model; verify by listening.
  * All work in audio callback is bounded, fixed-point, allocation-free.
@@ -436,20 +436,42 @@ void b1_panic(struct b1_engine *e){
  e->input_guard_peak=0u;e->input_guard_gain_q15=32767u;
  e->output_guard_gain_q15=32767u;
 }
-static int32_t fractional_read(const int16_t *buf,uint32_t write,uint32_t phase,int32_t center,int32_t delta){
- int32_t dq=center*256+((int32_t)b1_sine[phase>>21]*delta)/32768;
+/* V5.2: The Doppler tap and the stereo horn/drum amplitude modulation
+ * use the same phase. Accept the already-read sine sample rather than
+ * visiting the flash sine LUT twice for each microphone per PCM sample. */
+static int32_t fractional_read(const int16_t *buf,uint32_t write,int32_t sine,int32_t center,int32_t delta){
+ int32_t dq=center*256+(sine*delta)/32768;
  if(dq<512)dq=512;
  uint32_t age=(uint32_t)dq>>8,frac=(uint32_t)dq&255u;
  uint32_t at=(write-age)&(B1_ROTARY_SAMPLES-1u);
  int32_t a=buf[at],b=buf[(at-1u)&(B1_ROTARY_SAMPLES-1u)];
  return (a*(int32_t)(256u-frac)+b*(int32_t)frac)>>8;
 }
+/* V5.2: on a 32-bit JieLi, 64-bit multiply/divide helper calls can
+ * dominate the full ROCK path. All fast paths below are exact integer
+ * arithmetic (including signed truncation); unusual signals fall back to
+ * the original 64-bit expression. No gain, knee, EQ, or clipping changes. */
+static inline int32_t b1_mul_div256_fast(int32_t input,int32_t coefficient){
+ if(coefficient>=0 && coefficient<=1556 && b1_abs32(input)<=1000000u)
+  return (input*coefficient)/256;
+ return (int32_t)(((int64_t)input*coefficient)/256);
+}
+static inline int32_t b1_rock_cabinet_exact(int32_t dry,int32_t wet,uint32_t mix){
+ if(mix<=100u && b1_abs32(dry)<=1000000u && b1_abs32(wet)<=1000000u)
+  return (dry*(int32_t)(100u-mix)+wet*(int32_t)mix)/100;
+ return (int32_t)(((int64_t)dry*(100u-mix)+(int64_t)wet*mix)/100);
+}
+static inline int32_t b1_rock_crossfade_exact(int32_t clean,int32_t rock,uint32_t mix){
+ if(mix<=32767u && b1_abs32(clean)<=32767u && b1_abs32(rock)<=32767u)
+  return (clean*(int32_t)(32767u-mix)+rock*(int32_t)mix)/32767;
+ return (int32_t)(((int64_t)clean*(32767u-mix)+(int64_t)rock*mix)/32767);
+}
 static int32_t amp_saturate(int32_t in,uint8_t drive){
  /* Asymmetric soft saturation, restrained at low DRIVE, increasingly dense
   * harmonic distortion for Jon Lord / Marshall-style ROCK registrations. */
  if(drive==0u)return in;
  int32_t gain=256+(int32_t)drive*13; /* fixed Q8: 1 to ~6.1 gain */
- int32_t y=(int32_t)(((int64_t)in*gain)/256);
+ int32_t y=b1_mul_div256_fast(in,gain);
  /* Asymmetry: positive and negative half-cycles compress differently. */
  int32_t knee=y>=0?16500:20500;
  int32_t val=soft_ratio(y,knee==16500u?b1_clip_16500:b1_clip_20500,(uint32_t)knee);
@@ -517,7 +539,7 @@ static int32_t b1_amp_path(struct b1_engine *e,int32_t pre,const struct b1_block
  if(sag_diff>=0)e->amp_sag+=sag_diff/128;
  else e->amp_sag+=sag_diff/4096;
  int32_t sag_q8=256-e->amp_sag/500; /* 256..224 = max 12.5% reduction */
- shaped=(int32_t)(((int64_t)shaped*sag_q8)/256);
+ shaped=b1_mul_div256_fast(shaped,sag_q8);
  int32_t stage1=amp_saturate(shaped,e->amp_gain);
  int32_t stage2=amp_saturate(stage1,e->drive);
  /* Brightened speaker cabinet with an explicit, restrained mid-presence
@@ -529,9 +551,9 @@ static int32_t b1_amp_path(struct b1_engine *e,int32_t pre,const struct b1_block
  int32_t speaker=e->cab_treble-(e->cab_bass*7)/10+(e->cab_presence-e->cab_bass)/3;
  /* Retain some direct upper partials for bite without reverting to fizz. */
  speaker+=(stage2-e->cab_treble)*p->air_weight/16;
- rock=(int32_t)(((int64_t)stage2*(100u-e->cabinet_mix)+(int64_t)speaker*e->cabinet_mix)/100);
+ rock=b1_rock_cabinet_exact(stage2,speaker,e->cabinet_mix);
  }
- return (int32_t)(((int64_t)clean*(32767u-e->mode_mix_q15)+(int64_t)rock*e->mode_mix_q15)/32767);
+ return b1_rock_crossfade_exact(clean,rock,e->mode_mix_q15);
 }
 /* V4.1 SMART IDLE: advance the *logical* tonewheel clock, never the wave
  * synthesizer, when the entire DSP is proven silent. The actual 91 phases
@@ -808,8 +830,25 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    smooth_gain[b][h]=(uint16_t)(e->pull_smooth_q16[b][h]>>8);
   }
   if(transient_direct){
-   for(uint32_t j=0u;j<transient_count;j++)
-    (void)shared_wheel_sample(e,transient_wheels[j]);
+   if(e->cpu_relief && e->osc_mode==B1_OSC_ORGAN && e->osc_blend_q15==0u){
+    /* V5.1: exact SAFE ORGAN lookup while the transient work-list is
+     * prefetched. wheel_sample() would return this very same sine value.
+     * Keep the lazy phase arithmetic and published stamps untouched. */
+    for(uint32_t j=0u;j<transient_count;j++){
+     uint8_t w=transient_wheels[j];
+     if(e->wheel_stamp[w]!=e->wheel_frame){
+      uint32_t elapsed=e->wheel_frame-e->wheel_phase_stamp[w];
+      if(elapsed==1u)e->wheel_phase[w]+=e->wheel_inc[w];
+      else e->wheel_phase[w]+=e->wheel_inc[w]*elapsed;
+      e->wheel_phase_stamp[w]=e->wheel_frame;
+      e->wheel_value[w]=b1_sine[e->wheel_phase[w]>>21];
+      e->wheel_stamp[w]=e->wheel_frame;
+     }
+    }
+   }else{
+    for(uint32_t j=0u;j<transient_count;j++)
+     (void)shared_wheel_sample(e,transient_wheels[j]);
+   }
   }
   int32_t mix=0;
   uint8_t sounding_now=0u;
@@ -817,18 +856,52 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    /* Phase progression remains continuous, only harmonic additions are
     * grouped. Sum fits signed 32-bit: <=12*9*256*32767 ~=906M. */
    int32_t weighted_sum=0,leak_sum=0;
-   for(uint32_t j=0;j<e->mixed_wheel_count;j++){
-    uint8_t w=e->mixed_wheel_index[j];
-    int32_t tone;
-    if(dense_direct){
-     e->wheel_phase[w]+=e->wheel_inc[w];
-     if(!dense_defer_stamps)e->wheel_phase_stamp[w]=e->wheel_frame;
-     tone=wheel_sample(e,w);
-     e->wheel_value[w]=tone;
-     if(!dense_defer_stamps)e->wheel_stamp[w]=e->wheel_frame;
-    }else tone=shared_wheel_sample(e,w);
-    weighted_sum+=tone*e->mixed_wheel_gain[w];
-    leak_sum+=tone*(int32_t)e->mixed_wheel_leak[w];
+   /* V5.1: In the normal FM1 SAFE/ORGAN sustained state, wheel_sample()
+    * is *exactly* a single sine-table lookup. Select a dedicated dense
+    * kernel once per sample, instead of calling its general SAW/harmonic
+    * dispatcher for every contributing wheel. Only enable it when the
+    * blend is already at zero and ORGAN is the requested mode, so the
+    * result and all cache/phase/stamp updates are bit-identical. The
+    * general kernel remains for FULL DSP, transitions and SAW. */
+   if(dense_direct && e->cpu_relief && e->osc_mode==B1_OSC_ORGAN &&
+      e->osc_blend_q15==0u){
+    if(!e->leakage){
+     /* No per-wheel leakage loads/multiplications when leakage is OFF. */
+     for(uint32_t j=0;j<e->mixed_wheel_count;j++){
+      uint8_t w=e->mixed_wheel_index[j];
+      e->wheel_phase[w]+=e->wheel_inc[w];
+      if(!dense_defer_stamps)e->wheel_phase_stamp[w]=e->wheel_frame;
+      int32_t tone=b1_sine[e->wheel_phase[w]>>21];
+      e->wheel_value[w]=tone;
+      if(!dense_defer_stamps)e->wheel_stamp[w]=e->wheel_frame;
+      weighted_sum+=tone*e->mixed_wheel_gain[w];
+     }
+    }else{
+     for(uint32_t j=0;j<e->mixed_wheel_count;j++){
+      uint8_t w=e->mixed_wheel_index[j];
+      e->wheel_phase[w]+=e->wheel_inc[w];
+      if(!dense_defer_stamps)e->wheel_phase_stamp[w]=e->wheel_frame;
+      int32_t tone=b1_sine[e->wheel_phase[w]>>21];
+      e->wheel_value[w]=tone;
+      if(!dense_defer_stamps)e->wheel_stamp[w]=e->wheel_frame;
+      weighted_sum+=tone*e->mixed_wheel_gain[w];
+      leak_sum+=tone*(int32_t)e->mixed_wheel_leak[w];
+     }
+    }
+   }else{
+    for(uint32_t j=0;j<e->mixed_wheel_count;j++){
+     uint8_t w=e->mixed_wheel_index[j];
+     int32_t tone;
+     if(dense_direct){
+      e->wheel_phase[w]+=e->wheel_inc[w];
+      if(!dense_defer_stamps)e->wheel_phase_stamp[w]=e->wheel_frame;
+      tone=wheel_sample(e,w);
+      e->wheel_value[w]=tone;
+      if(!dense_defer_stamps)e->wheel_stamp[w]=e->wheel_frame;
+     }else tone=shared_wheel_sample(e,w);
+     weighted_sum+=tone*e->mixed_wheel_gain[w];
+     leak_sum+=tone*(int32_t)e->mixed_wheel_leak[w];
+    }
    }
    mix=weighted_sum/4096;
    if(e->leakage)mix+=leak_sum*(int32_t)e->leakage/2700;
@@ -1099,13 +1172,14 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    uint32_t hp=e->rotor_phase,dp=e->drum_phase;
    /* Opposed cabinet microphones see distinct Doppler, amplitude lobes and
     * early reflections; avoid the unnatural mirror-image modulation of V1.1. */
-   int32_t hl=fractional_read(e->rotor_line,e->rotor_write,hp,168,depth);
-   int32_t hr=fractional_read(e->rotor_line,e->rotor_write,hp+0x60000000u,173,depth);
-   int32_t dl=fractional_read(e->drum_line,e->rotor_write,dp,240,depth/3);
-   int32_t dr=fractional_read(e->drum_line,e->rotor_write,dp+0xa0000000u,248,depth/3);
+   /* These four exact LUT samples are needed both for Doppler and pan. */
    int32_t ph=b1_sine[hp>>21],pd=b1_sine[dp>>21];
    int32_t p_r=b1_sine[(hp+0x60000000u)>>21];
    int32_t d_r=b1_sine[(dp+0xa0000000u)>>21];
+   int32_t hl=fractional_read(e->rotor_line,e->rotor_write,ph,168,depth);
+   int32_t hr=fractional_read(e->rotor_line,e->rotor_write,p_r,173,depth);
+   int32_t dl=fractional_read(e->drum_line,e->rotor_write,pd,240,depth/3);
+   int32_t dr=fractional_read(e->drum_line,e->rotor_write,d_r,248,depth/3);
    hl=hl*(100+ph*34/32768)/100;hr=hr*(100+p_r*32/32768)/100;
    dl=dl*(100+pd*17/32768)/100;dr=dr*(100+d_r*17/32768)/100;
    /* One early wood-cabinet reflection per mic. Only the wet route gets it. */

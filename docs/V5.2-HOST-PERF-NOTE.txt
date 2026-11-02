@@ -1,0 +1,6 @@
+Host x86 performance runs (not JieLi target measurements, noisy):
+V5.1 run 1: full B3 518.96ns/sample, full ROCK 539.23, SAFE B3 167.85, SAFE ROCK 184.39
+V5.2 run 1: full B3 502.29ns/sample, full ROCK 541.61, SAFE B3 164.93, SAFE ROCK 177.10
+V5.1 run 2: full B3 477.72ns/sample, full ROCK 517.98, SAFE B3 160.08, SAFE ROCK 175.69
+V5.2 run 2: full B3 482.27ns/sample, full ROCK 558.64, SAFE B3 186.11, SAFE ROCK 184.64
+Results overlap; no defensible % faster claim or guaranteed physical headroom.

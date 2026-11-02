@@ -1,3 +1,21 @@
+## V5.2 — Lossless Leslie/ROCK optimization (2026-11-02)
+
+- Reuse the same four Leslie sine lookups for Doppler delay and stereo amplitude modulation in the FULL DSP route; no change to phase or output samples.
+- Add bounded exact 32-bit fast paths to the ROCK amplifier drive, sag, cabinet blend and B3/ROCK crossfade. Original 64-bit arithmetic remains for out-of-range signals.
+- Preserve the existing exact reverb reciprocal/correction; do not claim a reverb speedup without a benchmark.
+- All effects, 91 tonewheels, 12 voices, autosave, storage, OTA and permanent FM-1_481026 identity remain unchanged.
+- Host bitwise PCM + full-state checks and target build do not prove physical 12-voice FM1 CPU headroom; measure PEAK and DMA MISSES on the real device.
+
+## V5.1 — Lossless sustained-organ kernel and realtime headroom work (2026-11-02)
+
+- **FAST SAFE/ORGAN path:** while the organ oscillator blend is fully settled and the existing FM1 low-cost DSP route is active, the dense chord mixer directly reads the *same* 2048-entry sine table. This removes repeated calls and mode/SAW/harmonic checks per active tonewheel. Fallback unchanged for SAW, full DSP and live oscillator-mode transitions.
+- **Zero-leakage specialization:** avoid leakage loads and multiplications when LEAKAGE is OFF, without altering the other mixer or the meaning of a zero drawbar.
+- **Transient shared-wheel prefetch:** the existing adaptive distinct-wheel list also uses the direct sine lookup under the exact same SAFE/ORGAN condition; phase advance, wheel caching and complete internal state remain exact.
+- **No acoustic compromise:** all 91 tonewheels, nine drawbars, 12 voice slots, UPPER/LOWER/SOLO, percussion, click, chorus, Leslie, cabinet, delay/reverb, SAW, B3/ROCK, USB-MIDI, autosave and storage are retained. No altered sample rate, additional limiter, compressor or reduced effective polyphony.
+- **320 host native PCM+full-engine-state comparisons are exactly identical to V5.0** (96 poly scenarios + 128 gesture/transient scenarios + 96 further varied FX/organ/saw/sustained scenarios). Clipping/DMA chunking and short native OTA replay tests pass. Host safe ORGAN sustained-chord benchmarks improved significantly, but these times are **not measurements of the real FM1**.
+- **Same package/USB identity `FM-1_481026`.** Native OTA/USB/flash policy, staging, recovery, autosave and user-interface logic unchanged. WebInstaller embeds the new FWSC and its SHA-256.
+- **Not certified:** exact 60 MHz pi32v2 worst-case cycles per 256-frame interrupt and 12-voice full-FX headroom on actual FM1 have not been measured. AUDIO DIAG PEAK / DMA MISSES hardware test is mandatory before calling hardware crackle solved. Do not assume untested cross-firmware updates are safe.
+
 ## V5.0 — Lossless dynamic tonewheel and polyphonic DSP efficiency (2026-11-02)
 
 - Preserve **all 91 shared tonewheels, 12 voices, nine drawbars, three registrations, ORGAN/SAW, B3/ROCK, percussion, key click, leakage, scanner, Leslie, delay, reverb, MIDI and autosave**. No reduced sample rate, discarded oscillators or fixed voice limit.
