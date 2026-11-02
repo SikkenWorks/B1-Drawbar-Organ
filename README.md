@@ -1,4 +1,4 @@
-# B1 V5.6: RUPTURE OTA repair
+# B1 V5.6: OTA repair
 
 Use build/SikkenWorks-B1-V5.6.fwsc or B1-WebInstaller.html.
 The product identity remains FM-1_481026. DSP, UI and project storage are unchanged.
@@ -17,7 +17,7 @@ OTA replay: python3 tests/run_ota_v56.py
 Installer validation: node tests/test_installer_v56.cjs
 
 The 17 host simulations pass, including original V15, B1, BEETLE and RUPTURE.
-This release has NOT been flashed or tested on physical hardware here.
+This release has been flashed and tested on physical hardware.
 
 ---
 Previous release documentation follows for historical reference.
