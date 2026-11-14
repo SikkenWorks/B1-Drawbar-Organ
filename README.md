@@ -251,3 +251,5 @@ B1 is released under **GPL-3.0-only**. The included Inter font is subject to its
 
 ### V5.2 performance note
 Leslie and ROCK optimization preserves previous integer audio output. Full 12-voice CPU headroom on a real M-VAVE FM1 is not verified by a host benchmark; check AUDIO DIAG under worst-case conditions before claiming crackle-free operation. The permanent firmware identity remains `FM-1_481026`.
+
+You can also try B1 Drawbar Organ in the browser, no flashing needed, in the free community [FM-1 Emulator](https://fm1-emulator.atst.tools/).
