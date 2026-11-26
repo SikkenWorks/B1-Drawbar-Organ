@@ -1,27 +1,3 @@
-# B1 V5.6: OTA repair
-
-Use build/SikkenWorks-B1-V5.6.fwsc or B1-WebInstaller.html.
-The product identity remains FM-1_481026. DSP, UI and project storage are unchanged.
-
-If the installed B1 refuses even this update, a new package cannot repair code
-already running on the device. Switch off, hold OCT-minus, then switch on to enter
-the existing FM1 bootloader. Use the compatible FM1 installer for that mode.
-The web installer requires a compatible USB-MIDI interface; it cannot replace
-an unavailable bootloader driver. REC-at-boot is an additional silent retry mode,
-but it still runs the old updater and may encounter the same validation defect.
-
-After installing V5.6, test a V5.6 self-update first, then the desired Hub firmware.
-
-Build: JIELI_TOOLCHAIN=/absolute/path/to/jieli python3 tools/build_v56_release.py
-OTA replay: python3 tests/run_ota_v56.py
-Installer validation: node tests/test_installer_v56.cjs
-
-The 17 host simulations pass, including original V15, B1, BEETLE and RUPTURE.
-This release has been flashed and tested on physical hardware.
-
----
-Previous release documentation follows for historical reference.
-
 <div align="center">
 
 <img src="B1.gif" alt="B1 drawbar organ on the M-VAVE FM-1" width="240">
