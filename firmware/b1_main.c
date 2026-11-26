@@ -1,8 +1,8 @@
-/* SikkenWorks B1 V5.4 (native OTA, lossless polyphony, autosave and KEY ASSIGN preserved). GPL-3.0-only, custom FM1 executable.
+/* SikkenWorks B1 V5.7 (native OTA, lossless polyphony, autosave and KEY ASSIGN preserved). GPL-3.0-only, custom FM1 executable.
  * Felucca platform HAL © Leo Kuroshita / Hügelton Instruments.
  * FLASH POLICY: OTA staging plus B1-owned, dynamically selected verified-safe two-sector journal.
  * BEETLE project data at 0x97000..0xDFFFF is never modified.
- * Earlier B1 releases have been tested on physical FM1 hardware; the V5.2
+ * Earlier B1 releases have been tested on physical FM1 hardware; the V5.7
  * realtime headroom and cross-firmware hardware transitions remain unverified.
  */
 #include <stdint.h>
@@ -31,6 +31,7 @@
 #include "b1_mode_keys.h"
 #include "b1_cpu_idle.h"
 #include "b1_storage.h"
+#include "b1_flash_compat.h"
 #include "libc.c"
 #include "lcd.c"
 #define FELUCCA_CDC 0
@@ -63,7 +64,7 @@ static volatile uint8_t save_requested;
  * Debounced and wear-throttled, deferred until the instrument is silent. */
 #define B1_AUTO_DEBOUNCE_MS 5000u
 #define B1_AUTO_MIN_INTERVAL_MS 60000u
-static uint8_t b1_auto_pending,b1_auto_config_pending;
+static uint8_t b1_auto_pending;
 static uint32_t b1_auto_last_edit_ms,b1_auto_last_attempt_ms;
 static uint8_t b1_auto_attempted;
 /* 1=load saved slot, 2=new blank project. Execution is deferred until AFTER
@@ -104,6 +105,11 @@ static struct b1_lcd_damage b1_lcd_cache;
 static volatile uint8_t b1_cpu_relief;
 static volatile uint8_t b1_ui_dirty;
 static volatile uint8_t b1_updating;
+/* SPI NOR selection is a read-only, boot-time check. An unknown/failed
+ * detection disables *all* B1-owned writes, but UBOOT recovery stays open.
+ * This is not a proof that the chosen OTA loader supports either boot ROM. */
+static uint32_t b1_flash_jedec;
+static uint8_t b1_flash_write_ok;
 static uint8_t b1_ota_step;
 static int32_t b1_ota_error;
 static void b1_screen(void);
@@ -280,7 +286,6 @@ static void b1_screen(void){
   .project_storage_state=b1_saved.state,.project_error=project_error,
   .name_cursor=name_cursor,.edit_name=edit_name,.dirty_project=dirty_project,
   .reclaim_armed=reclaim_armed,
-  .autosave_enabled=b1_saved.autosave_enabled,.autosave_pending=b1_auto_config_pending,
   .project_notice=(uint8_t)((int32_t)(project_notice_until-b1_ms)>0?project_notice:0u)
  };
  b1_ui_render(b1_frame,&ui);
@@ -332,13 +337,13 @@ static int b1_io_read(void *ctx,uint32_t addr,uint8_t *buf,uint32_t n){
 }
 static int b1_io_erase(void *ctx,uint32_t addr){
  (void)ctx;uint32_t took=0u;
- if(!FL_IN(addr,B1_STORAGE_SECTOR,B1_STORAGE_SCAN_START,B1_STORAGE_SCAN_END) || (addr & (B1_STORAGE_SECTOR-1u)))return -1;
+ if(!b1_flash_write_ok || !FL_IN(addr,B1_STORAGE_SECTOR,B1_STORAGE_SCAN_START,B1_STORAGE_SCAN_END) || (addr & (B1_STORAGE_SECTOR-1u)))return -1;
  fm1_irq_off();int rc=FL_FAR(fl_erase4k_ram)(addr,&took);fm1_irq_enable_all();
  fm1_wdt_feed();return rc;
 }
 static int b1_io_program(void *ctx,uint32_t addr,const uint8_t *buf,uint32_t n){
  (void)ctx;
- if(!n||!FL_IN(addr,n,B1_STORAGE_SCAN_START,B1_STORAGE_SCAN_END))return -1;
+ if(!b1_flash_write_ok || !n||!FL_IN(addr,n,B1_STORAGE_SCAN_START,B1_STORAGE_SCAN_END))return -1;
  while(n){uint32_t count=256u-(addr&255u);if(count>n)count=n;
   uint32_t took=0u;fm1_irq_off();int rc=FL_FAR(fl_prog_ram)(addr,buf,count,&took);fm1_irq_enable_all();
   fm1_wdt_feed();if(rc)return rc;addr+=count;buf+=count;n-=count;
@@ -362,21 +367,7 @@ static void b1_resume_after_write(void){
  fm1_audio_output_enable(1u);output_ready=1u;project_io_busy=0u;
 }
 static void b1_autosave_touch(void){
- /* Turning AUTO off must not queue a background write for parameter changes. */
- if(!b1_saved.autosave_enabled)return;
  b1_auto_pending=1u;b1_auto_last_edit_ms=b1_ms;
-}
-static void b1_autosave_set(uint8_t enabled){
- enabled=(uint8_t)!!enabled;
- if(enabled==b1_saved.autosave_enabled)return;
- b1_saved.autosave_enabled=enabled;
- b1_auto_config_pending=1u;
- b1_auto_pending=enabled;
- b1_auto_last_edit_ms=b1_ms;
- project_error=0;
- /* Persist once after five seconds of no edits and complete audio silence.
-  * The new setting is already effective in RAM even before the flash commit. */
- b1_ui_dirty=1u;
 }
 /* Flash programming uses XIP and may stall audio. Only write after every
  * voice and effect tail has completely finished, and NEVER during OTA. */
@@ -389,34 +380,27 @@ static uint8_t b1_autosave_quiet(void){
 }
 static void b1_autosave_service(void){
  uint32_t now=b1_ms;
- if(!b1_auto_config_pending && !(b1_saved.autosave_enabled && b1_auto_pending))return;
- if((uint32_t)(now-b1_auto_last_edit_ms)<B1_AUTO_DEBOUNCE_MS ||
-    /* Setting changes may be saved once the instrument is quiet, even if the
-     * last scene autosave happened recently. Five-second debounce limits wear. */
-    (!b1_auto_config_pending && b1_auto_attempted &&
-     (uint32_t)(now-b1_auto_last_attempt_ms)<B1_AUTO_MIN_INTERVAL_MS) ||
+ if(!b1_auto_pending || (uint32_t)(now-b1_auto_last_edit_ms)<B1_AUTO_DEBOUNCE_MS ||
+    (b1_auto_attempted && (uint32_t)(now-b1_auto_last_attempt_ms)<B1_AUTO_MIN_INTERVAL_MS) ||
     (b1_saved.state!=B1_STORAGE_READY&&b1_saved.state!=B1_STORAGE_EMPTY) ||
     !b1_autosave_quiet())return;
- /* No flash operation ever occurs inside DMA/ISR or with active notes/tails. */
+ /* Stop DMA before capturing a coherent snapshot, as with manual saves. */
  b1_stop_for_write();
  b1_pending_save=b1_saved.archive;
- uint8_t save_scene=(uint8_t)(b1_saved.autosave_enabled && b1_auto_pending);
- uint8_t identical=(uint8_t)!b1_auto_config_pending;
- if(save_scene){
-  b1_project_capture(&b1_pending_save.live,&b1_keys,&b1_audio);
-  b1_pending_save.live_valid=1u;
-  if(!b1_saved.archive.live_valid)identical=0u;
-  if(identical){
-   const uint8_t *a=(const uint8_t*)&b1_saved.archive.live,*b=(const uint8_t*)&b1_pending_save.live;
-   for(uint32_t i=0;i<sizeof(struct b1_project);i++)if(a[i]!=b[i]){identical=0u;break;}
-  }
+ b1_project_capture(&b1_pending_save.live,&b1_keys,&b1_audio);
+ b1_pending_save.live_valid=1u;
+ /* Comparing every byte avoids unnecessary wear even after navigation. */
+ uint8_t identical=b1_saved.archive.live_valid;
+ if(identical){
+  const uint8_t *a=(const uint8_t*)&b1_saved.archive.live,*b=(const uint8_t*)&b1_pending_save.live;
+  for(uint32_t i=0;i<sizeof(struct b1_project);i++)if(a[i]!=b[i]){identical=0u;break;}
  }
  int rc=0;
  if(!identical)rc=b1_storage_commit(&b1_saved,&b1_flash_io,&b1_pending_save);
  b1_auto_last_attempt_ms=now;b1_auto_attempted=1u;
  if(!rc){
-  b1_auto_pending=0u;b1_auto_config_pending=0u;
-  if(!identical){project_notice=save_scene?3u:4u;project_notice_until=now+1600u;b1_ui_dirty=1u;}
+  b1_auto_pending=0u;
+  if(!identical){project_notice=3u;project_notice_until=now+1600u;b1_ui_dirty=1u;}
  }
  b1_resume_after_write();
  if(rc){project_error=(int8_t)(rc<-100?-100:rc);b1_ui_dirty=1u;}
@@ -458,7 +442,7 @@ static void b1_save_named(void){
  int rc=b1_storage_commit(&b1_saved,&b1_flash_io,&b1_pending_save);
  b1_resume_after_write();
  if(rc){project_error=(int8_t)(rc<-100?-100:rc);return;}
- project_error=0;dirty_project=0u;ui_page=4u;b1_auto_pending=0u;b1_auto_config_pending=0u;b1_auto_last_attempt_ms=b1_ms;b1_auto_attempted=1u;
+ project_error=0;dirty_project=0u;ui_page=4u;b1_auto_pending=0u;b1_auto_last_attempt_ms=b1_ms;b1_auto_attempted=1u;
  project_notice=1u;project_notice_until=b1_ms+1600u;
 }
 static uint8_t bounded_add(uint8_t n,int32_t delta,uint8_t low,uint8_t high){
@@ -644,8 +628,6 @@ static void b1_controls(uint32_t pressed){
   if(alg){r->bank=bounded_add(r->bank,alg,0,B1_BANKS-1);changed=1;dirty_project=1;}
  }else if(ui_page==4){
   if(enc[0]||sel){project_cursor=bounded_add(project_cursor,enc[0]+sel,0,B1_PROJECT_SLOTS-1);changed=1;}
-  /* SAVE menu K4: rotate right = ON, left = OFF, independent of slot. */
-  if(enc[3]){b1_autosave_set((uint8_t)(enc[3]>0));changed=1;}
  }else if(ui_page==7){
   if(enc[0]){project_cursor=bounded_add(project_cursor,enc[0],0,B1_PROJECT_SLOTS-1);b1_name_edit_begin();changed=1;}
   if(enc[1]||sel){name_cursor=bounded_add(name_cursor,enc[1]+sel,0,B1_PROJECT_NAME_MAX-1u);changed=1;}
@@ -692,22 +674,32 @@ void fm1_cstart(void){
  /* OCT- bypasses the app and enters the existing bootloader: stock/other firmware restore path. */
  if(fm1_in.buttons&1u){fm1_audio_output_enable(0u);fm1_irq_off();fm1_enter_uboot();}
  safe_mode=(uint8_t)((fm1_in.buttons&(1u<<13))!=0u); /* REC at power -> silent recovery UI */
+ /* Known 8-Mbit SPI NOR devices use identical 0x20 erase / 0x02 program
+  * commands. Never mistake a logo or a stock firmware version for JEDEC ID.
+  * Probe once, before the storage journal is opened or OTA can write. */
+ fm1_irq_off();
+ b1_flash_jedec=FL_FAR(fl_jedec_ram)();
+ fm1_irq_enable_all();
+ b1_flash_write_ok=b1_flash_supported_id(b1_flash_jedec);
  b1_performance_init(&b1_keys);b1_reset(&b1_audio);chord_cursor=20u;chord_quality=b1_keys.chord_map[chord_cursor];
  /* USB comes up BEFORE any project-sector scan. REC boot is a genuinely
   * minimal update/recovery mode and never touches project flash at all. */
  usb_start();
- if(!safe_mode){
+ if(!safe_mode && b1_flash_write_ok){
   /* Never erase flash at boot. A fully occupied private journal region
    * can be reclaimed ONLY with explicit two-step on-device confirmation. */
   (void)b1_storage_open(&b1_saved,&b1_flash_io);
   /* Restore live parameters once, before audio DMA starts; never load
    * saved voice/note runtime state. REC recovery deliberately skips this. */
-  if(b1_saved.autosave_enabled && b1_saved.archive.live_valid &&
+  if(b1_saved.archive.live_valid &&
      b1_project_apply(&b1_saved.archive.live,&b1_keys,&b1_audio)){
    chord_quality=b1_keys.chord_map[chord_cursor];
   }
   if(b1_saved.state==B1_STORAGE_LOCKED && b1_saved.active_bank<0)ui_page=8u;
  }
+ /* Unsupported flash is not a reason to disable USB MIDI/UBOOT; the organ
+  * continues to play, but no local project/OTA sector may be modified. */
+ if(!b1_flash_write_ok){b1_saved.state=B1_STORAGE_LOCKED;project_error=-26;}
  if(safe_mode)b1_screen(); /* Direct safe UI, never animate over recovery. */
  else {b1_startup_animation();b1_screen();}
  if(usb.uboot_req){fm1_audio_output_enable(0u);usb_detach();fm1_irq_off();fm1_enter_uboot();}
@@ -750,7 +742,8 @@ void fm1_cstart(void){
    fm1_irq_off();b1_audio_active=0u;fm1_audio_stop();fm1_irq_enable_all();
    b1_updating=1u;b1_ota_step=1u;b1_ota_error=0;
    b1_screen();
-   int update_status=ota_session();
+   int update_status=b1_flash_write_ok ? ota_session() : -26;
+   if(!b1_flash_write_ok)ota_show(9,-26);
    b1_updating=0u;
    /* A successful update does not return. A failure must stay silent,
     * preserve projects, and keep the USB identity/OTA retry available. */

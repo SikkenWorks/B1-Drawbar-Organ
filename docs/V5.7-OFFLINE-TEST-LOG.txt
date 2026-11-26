@@ -1,0 +1,25 @@
+PASS: Puya/UCUN supported; unknown JEDEC safely fails closed
+PASS: 1,500,000 exact full-width checks (including fallback) against V5.1 64-bit ROCK arithmetic
+PASS V5.1 vs V5.2: native_v45_poly_exact.c 96 full-state scenarios
+PASS V5.1 vs V5.2: native_v50_transition_exact.c 128 full-state scenarios
+PASS V5.1 vs V5.2: native_v51_full_state.c 96 full-state scenarios
+NOT A PHYSICAL FM1 CPU OR DMA DEADLINE MEASUREMENT
+PASS: 256-frame DMA buffer, deadline guard, fade-out and 64-frame crossfade bounds
+PASS /tmp/b1-v57-ota-ig1i6nr3/B1_V57_self.ufw rc=0 reads=2362 special=1 erases=5 writes=17 commits=1 ms=4788 stageId=ota-FM-1_015
+PASS /tmp/b1-v57-ota-ig1i6nr3/BEETLE_RC101.ufw rc=0 reads=2362 special=1 erases=5 writes=17 commits=1 ms=4788 stageId=ota-FM-1_015
+PASS /tmp/b1-v57-ota-ig1i6nr3/B1_V52_previous.ufw rc=0 reads=2362 special=1 erases=5 writes=17 commits=1 ms=4788 stageId=ota-FM-1_015
+PASS /tmp/b1-v57-ota-ig1i6nr3/Official_Open_V15_8entry.ufw rc=0 reads=2477 special=1 erases=5 writes=42 commits=1 ms=4981 stageId=ota-FM-1_015
+PASS /tmp/b1-v57-ota-ig1i6nr3/Official_V15_UCUN_FULLFLASH_BLOCKED.ufw rc=-27 reads=2435 special=0 erases=0 writes=0 commits=0 ms=4867 stageId=
+PASS /tmp/b1-v57-ota-ig1i6nr3/Foreign_recompiled_loader_REJECT.ufw rc=-16 reads=2348 special=0 erases=0 writes=0 commits=0 ms=4688 stageId=
+PASS /tmp/b1-v57-ota-ig1i6nr3/Foreign_longer_loader_REJECT.ufw rc=-16 reads=2347 special=0 erases=0 writes=0 commits=0 ms=4687 stageId=
+PASS /tmp/b1-v57-ota-ig1i6nr3/No_success.ufw rc=-13 reads=2365 special=4 erases=10 writes=16 commits=0 ms=4791 stageId=
+PASS /tmp/b1-v57-ota-ig1i6nr3/Abort.ufw rc=-25 reads=27 special=0 erases=0 writes=0 commits=0 ms=51 stageId=
+PASS /tmp/b1-v57-ota-ig1i6nr3/Erase_failure.ufw rc=-17 reads=2361 special=0 erases=2 writes=0 commits=0 ms=4787 stageId=
+PASS /tmp/b1-v57-ota-ig1i6nr3/Readback_corrupt.ufw rc=-18 reads=2361 special=0 erases=10 writes=15 commits=0 ms=4787 stageId=
+PASS /tmp/b1-v57-ota-ig1i6nr3/Unknown_V16_boot_REJECT.ufw rc=-29 reads=2361 special=0 erases=0 writes=0 commits=0 ms=4747 stageId=
+PASS /tmp/b1-v57-ota-ig1i6nr3/Bad_XIP.ufw rc=-24 reads=2333 special=0 erases=0 writes=0 commits=0 ms=4659 stageId=
+V5.7 OTA replay completed: successful transfers are HOST simulations, not FM1 hardware proof.
+PASS: native AC791N package, USB identity, embedded exact FWSC/SHA256, V16 warning
+PASS: unchanged sound engine and performance scheduler source vs V5.2
+PASS: browser installer JavaScript syntax
+PASS: B1 V5.7 offline release validation. Physical FM1 end-to-end NOT TESTED.

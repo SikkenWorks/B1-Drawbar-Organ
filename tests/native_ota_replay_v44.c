@@ -5,6 +5,8 @@
 #include <string.h>
 #define FELUCCA_ID "FM-1_481026"
 #define FELUCCA_OTA_DRYRUN 0
+#include "b1_flash_compat.h"
+static uint32_t b1_flash_jedec=B1_FLASH_PUYA_P25Q80H;
 #include "ota.c"
 static uint8_t *package;static uint32_t package_len;
 static uint8_t stage[OTA_AREA_LEN], protected_boot[0x4000];
@@ -69,7 +71,10 @@ int main(int argc,char **argv){
  f=fopen(argv[2],"rb");if(!f)return 3;
  if(fread(protected_boot,1,sizeof protected_boot,f)!=sizeof protected_boot)return 3;fclose(f);
  memset(stage,255,sizeof stage);
+ if(argc>4 && !strcmp(argv[4],"ucun"))b1_flash_jedec=B1_FLASH_UCUN_UC25HQ80;
+ if(argc>4 && !strcmp(argv[4],"boot-v16"))protected_boot[0x133u]^=0x80u;
  int variant_expected=argc>4 && !strcmp(argv[4],"incoming");
+ int stock_expected=argc>4 && !strcmp(argv[4],"stock");
  if(argc>4){deny_success=!strcmp(argv[4],"no-success");cancelled=!strcmp(argv[4],"cancel");io_failure=!strcmp(argv[4],"erase-fail");readback_corrupt=!strcmp(argv[4],"readback-corrupt");}
  int rc=ota_session();int pass=!strcmp(argv[3],"expect_pass"), prereject=!strcmp(argv[3],"expect_prereject");
  int boot_ok=1;/* boot[] was never writable by this harness */
@@ -80,7 +85,12 @@ int main(int argc,char **argv){
    if(ota_ufw(hdr,&flo,&fln,&olo,&oln)!=0||oln<32u||
       ota_rd32(stage+8)!=oln||memcmp(stage+32,package+olo+32,oln-32u))boot_ok=0;
  }
- int known_loader_ok=(variant_expected || !memcmp(stage+32,b1_trusted_loader,ETCH_OTA_BODY_LEN));
+ int known_loader_ok=(variant_expected || stock_expected || !memcmp(stage+32,b1_trusted_loader,ETCH_OTA_BODY_LEN));
+ if(stock_expected && rc==0){
+   uint8_t hdr[1024];uint32_t flo,fln,olo,oln;
+   if(ota_ufw(hdr,&flo,&fln,&olo,&oln)!=8 || oln!=19969u ||
+      memcmp(stage+32,package+olo+32,oln-32u))known_loader_ok=0;
+ }
  int ok=(pass?(rc==0&&commits==1&&special_requests>=1 && erases==5u && writes>=2u && known_loader_ok && !memcmp(committed+8,variant_expected?"ota-FM-1_900":"ota-FM-1_015",12)):
               (rc!=0&&commits==0&&(!prereject||(erases==0&&writes==0&&special_requests==0))))&&boot_ok;
  printf("%s %s rc=%d reads=%u special=%u erases=%u writes=%u commits=%u ms=%u stageId=%.*s\n",
