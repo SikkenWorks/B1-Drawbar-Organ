@@ -1,8 +1,8 @@
-/* SikkenWorks B1 V5.7 (native OTA, lossless polyphony, autosave and KEY ASSIGN preserved). GPL-3.0-only, custom FM1 executable.
+/* SikkenWorks B1 V5.9 (native OTA, lossless polyphony, autosave and KEY ASSIGN preserved). GPL-3.0-only, custom FM1 executable.
  * Felucca platform HAL © Leo Kuroshita / Hügelton Instruments.
  * FLASH POLICY: OTA staging plus B1-owned, dynamically selected verified-safe two-sector journal.
  * BEETLE project data at 0x97000..0xDFFFF is never modified.
- * Earlier B1 releases have been tested on physical FM1 hardware; the V5.7
+ * Earlier B1 releases have been tested on physical FM1 hardware; the V5.9
  * realtime headroom and cross-firmware hardware transitions remain unverified.
  */
 #include <stdint.h>
@@ -25,7 +25,7 @@
 #include "b1_performance.h"
 #include "b1_ui.h"
 #include "b1_lcd_dirty.h"
-#include "b1_master_gain.h"
+#include "b1_output.h"
 #include "b1_startup.h"
 #include "b1_led_policy.h"
 #include "b1_mode_keys.h"
@@ -46,7 +46,8 @@
 extern uint32_t _bss_start[],_bss_end[],_pool_start[],_pool_end[];
 extern uint32_t _data_load[],_data_start[],_data_end[],_rt_load[],_rt_start[],_rt_end[];
 extern void isr_timer5(void),isr_alnk0(void);
-static volatile uint32_t b1_ms,b1_ticks;
+static volatile uint32_t b1_ms;
+static uint8_t b1_timer_phase;
 static volatile uint8_t b1_audio_active,b1_isr_active,b1_overrun;
 static struct b1_engine b1_audio __attribute__((section(".pool")));
 static struct b1_performance b1_keys __attribute__((section(".pool")));
@@ -80,7 +81,7 @@ static struct b1_mode_keys_state b1_mode_key_state;
 /* Audio diagnostics are on SCL -> SELECT (not the SCALE keyboard LEDs). */
 static volatile uint8_t b1_audio_diag,b1_test_tone,b1_force_safe;
 static uint8_t b1_safe_latched;
-static uint16_t b1_good_dma_blocks;
+static int32_t b1_packed[HALF_FRAMES*2u];
 static uint32_t b1_probe_phase;
 /* V4.8: 256 frames at 44.1 kHz = 5.805ms, timer4 at 24MHz.
  * 110k ticks (~4.58ms) warns before the 132k (~5.5ms) hard budget.
@@ -121,14 +122,13 @@ static volatile uint16_t b1_master_target;
 static uint16_t b1_master_smoothed;
 
 void fm1_timer5_irq(void){
- fm1_timer5_ack();fm1_input_tick();++b1_ticks;
- if(b1_ticks%10u==0u)++b1_ms;
+ fm1_timer5_ack();fm1_input_tick();if(++b1_timer_phase==10u){b1_timer_phase=0u;++b1_ms;}
  /* Keep USB endpoint processing out of the codec DMA-critical render. */
  /* Keep USB enumeration and the update channel alive even if DSP is busy.
   * Only TIMER5 touches SIE registers. Before USB is configured we cannot
   * skip USB polls due to an overloaded audio callback: doing so leaves the
   * FM1 invisible to installers. REC boot also skips audio entirely. */
- if(b1_ticks%5u==0u && (!b1_isr_active || !usb.config || safe_mode))usb_poll();
+ if((b1_timer_phase==0u || b1_timer_phase==5u) && (!b1_isr_active || !usb.config || safe_mode))usb_poll();
 }
 static void b1_drain_midi(void){
  uint32_t end=mi_w;
@@ -145,6 +145,26 @@ static void b1_drain_midi(void){
 }
 static void fm1_fault(const fm1_crash_t *c){
  (void)c;fm1_audio_output_enable(0u);fm1_audio_stop();fm1_irq_off();fm1_enter_uboot();
+}
+/* Recheck hardware ownership every 16 stereo frames. A hardware edge
+ * remains possible inside a group. The final check detects that case. */
+static uint8_t b1_copy_to_dma(uint32_t half,int32_t *dst,const int32_t *src){
+ for(uint32_t i=0;i<HALF_FRAMES*2u;i+=32u){
+  if(!fm1_audio_half_owned(half))return 0u;
+  for(uint32_t j=0;j<32u;j++)dst[i+j]=src[i+j];
+ }
+ __asm__ volatile("csync" ::: "memory");
+ return fm1_audio_half_owned(half);
+}
+static void b1_note_dma_miss(void){
+ b1_overrun=1u;++b1_audio_overruns;++b1_dma_deadlines;
+ b1_safe_latched=1u;b1_audio.cpu_relief=1u;b1_dma_resume_ramp=1u;
+}
+static void b1_finish_audio_irq(uint32_t start){
+ uint32_t elapsed=(uint32_t)(fm1_ticks()-start);
+ if(elapsed>b1_audio_peak_ticks)b1_audio_peak_ticks=elapsed;
+ ++b1_audio_blocks;
+ b1_isr_active=0u;
 }
 void fm1_alnk0_irq(void){
  b1_isr_active=1;
@@ -186,8 +206,7 @@ void fm1_alnk0_irq(void){
      * while it is still FREE. If it is free, replace stale samples with
      * silence. Otherwise leave the DMA-owned half untouched. Audio resumes
      * with the next safe callback; no stale PCM is deliberately reissued. */
-    b1_overrun=1u;++b1_audio_overruns;++b1_dma_deadlines;
-    b1_safe_latched=1u;b1_audio.cpu_relief=1u;b1_dma_resume_ramp=1u;
+    b1_note_dma_miss();
     if(fm1_audio_half_owned(half)){
      int32_t *silence=&b1_dma[half*HALF_FRAMES*2u];
      for(uint32_t t=0;t<HALF_FRAMES;t++){
@@ -195,77 +214,43 @@ void fm1_alnk0_irq(void){
       /* Widen BEFORE multiplication. The current PCM24 packing is well
        * inside 32-bit bounds, but this keeps the emergency ramp safe even
        * if a future output stage uses the full signed 24-bit DAC range. */
-      silence[t*2u]=(int32_t)(((int64_t)b1_dma_last_l*(int64_t)fade)/(int64_t)HALF_FRAMES);
-      silence[t*2u+1u]=(int32_t)(((int64_t)b1_dma_last_r*(int64_t)fade)/(int64_t)HALF_FRAMES);
+      b1_packed[t*2u]=(int32_t)(((int64_t)b1_dma_last_l*(int64_t)fade)/(int64_t)HALF_FRAMES);
+      b1_packed[t*2u+1u]=(int32_t)(((int64_t)b1_dma_last_r*(int64_t)fade)/(int64_t)HALF_FRAMES);
      }
-     b1_dma_last_l=0;b1_dma_last_r=0;
+     if(b1_copy_to_dma(half,silence,b1_packed)){b1_dma_last_l=0;b1_dma_last_r=0;}
     }
-    if(cost>b1_audio_peak_ticks)b1_audio_peak_ticks=cost;
-    b1_isr_active=0;return;
+    b1_finish_audio_irq(start);return;
    }
    if(cost>B1_DMA_SOFT_BUDGET_TICKS){
     /* Keep audio output intact, but preempt another imminent failure. */
     b1_safe_latched=1u;b1_audio.cpu_relief=1u;
-   }else if(b1_good_dma_blocks<65000u){++b1_good_dma_blocks;}
-   /* Commit is bounded and only to the currently free DMA half. The
-    * second ownership check makes missed deadlines observable instead of
-    * silently accepting a partially completed write. */
-   if(!fm1_audio_half_owned(half)){
-    b1_overrun=1u;++b1_audio_overruns;++b1_dma_deadlines;
-    b1_safe_latched=1u;b1_audio.cpu_relief=1u;b1_dma_resume_ramp=1u;
-    if(cost>b1_audio_peak_ticks)b1_audio_peak_ticks=cost;
-    b1_isr_active=0;return;
    }
    int32_t *dst=&b1_dma[half*HALF_FRAMES*2u];
-   for(uint32_t i=0;i<HALF_FRAMES*2u;i++){
-    int32_t y=b1_pcm[i];
-    if(!output_ready){y=0;dst[i]=0;continue;}
-    if((i&1u)==0u){
-     int32_t diff=(int32_t)b1_master_target-(int32_t)b1_master_smoothed;
-     if(diff) b1_master_smoothed=(uint16_t)((int32_t)b1_master_smoothed+(diff>0?(diff+255)/256:-((-diff+255)/256)));
-    }
-    /* V3.7: exact 16-bit fixed-domain divide replacement. Tests cover
-     * every signed PCM value at edge gains + randomized combinations. */
-    y=b1_master_gain_exact((int16_t)y,b1_master_smoothed);
-    if(fade<4096u){y=(y*(int32_t)fade)/4096; if((i&1u)&&fade<4096u)++fade;}
-    /* Resume crossfade after an underrun: 64 stereo frames = 1.45ms.
-     * The calculation is done in signed 32 bits with bounded 16-bit PCM. */
-    if(b1_dma_resume_ramp){
-     uint32_t t=i>>1;
-     if(t<64u){
-      int32_t previous=((i&1u)?b1_dma_last_r:b1_dma_last_l)/128;
-      y=(previous*(int32_t)(64u-t)+y*(int32_t)t)/64;
-     }
-    }
-    dst[i]=y*128;
+   /* Stage gain, fades and packing before writing into ALNK memory. */
+   uint16_t next_gain=b1_master_smoothed,next_fade=fade;
+   b1_pack_output(b1_pcm,b1_packed,HALF_FRAMES,b1_master_target,
+                  &next_gain,&next_fade,output_ready,b1_dma_resume_ramp,
+                  b1_dma_last_l,b1_dma_last_r);
+   if((uint32_t)(fm1_ticks()-start)>B1_DMA_HARD_BUDGET_TICKS ||
+      !b1_copy_to_dma(half,dst,b1_packed)){
+    b1_note_dma_miss();
+    b1_finish_audio_irq(start);
+    return;
    }
-   if(b1_dma_resume_ramp)b1_dma_resume_ramp=0u;
-   b1_dma_last_l=dst[(HALF_FRAMES-1u)*2u];
-   b1_dma_last_r=dst[(HALF_FRAMES-1u)*2u+1u];
-   __asm__ volatile("csync" ::: "memory");
-   if(!fm1_audio_half_owned(half)){
-    b1_overrun=1u;++b1_audio_overruns;++b1_dma_deadlines;
-    b1_safe_latched=1u;b1_audio.cpu_relief=1u;b1_dma_resume_ramp=1u;
-   }
-   uint32_t elapsed=(uint32_t)(fm1_ticks()-start);
-   if(elapsed>b1_audio_peak_ticks)b1_audio_peak_ticks=elapsed;
+   b1_master_smoothed=next_gain;fade=next_fade;
+   b1_dma_resume_ramp=0u;
+   b1_dma_last_l=b1_packed[(HALF_FRAMES-1u)*2u];
+   b1_dma_last_r=b1_packed[(HALF_FRAMES-1u)*2u+1u];
   }else{
    /* V3.6: a pending project transaction pauses only synthesis, not DMA or
     * timer/USB interrupts. Fill the CPU-owned half with silence while the
     * main loop resets/applies the large engine state with IRQs enabled.
     * Avoid touching any half after its new deadline has arrived. */
-   if(fm1_audio_half_owned(half)){
-    int32_t *dst=&b1_dma[half*HALF_FRAMES*2u];
-    for(uint32_t i=0;i<HALF_FRAMES*2u;i++)dst[i]=0;
-    __asm__ volatile("csync" ::: "memory");
-    if(!fm1_audio_half_owned(half)){
-     b1_overrun=1u;++b1_audio_overruns;++b1_dma_deadlines;
-    }
-   }else{
-    b1_overrun=1u;++b1_audio_overruns;++b1_dma_deadlines;
-   }
+   for(uint32_t i=0;i<HALF_FRAMES*2u;i++)b1_packed[i]=0;
+   if(!b1_copy_to_dma(half,&b1_dma[half*HALF_FRAMES*2u],b1_packed))b1_note_dma_miss();
   }
-  ++b1_audio_blocks;
+  b1_finish_audio_irq(start);
+  return;
  }
  b1_isr_active=0;
 }
@@ -374,7 +359,7 @@ static void b1_autosave_touch(void){
 static uint8_t b1_autosave_quiet(void){
  if(safe_mode||b1_updating||usb.ota_req||usb.uboot_req||project_io_busy||save_requested||
     b1_project_transition_requested||!b1_audio_active||b1_keys.pressed||fm1_in.notes||
-    b1_audio.percussion_env||b1_audio.fx_tail_samples||b1_audio.fx_was_audible)return 0u;
+    mi_r!=mi_w||midi_in_overflow||b1_test_tone||b1_audio.output_gate_q15||b1_audio.percussion_env||b1_audio.fx_tail_samples||b1_audio.fx_was_audible)return 0u;
  for(uint32_t i=0;i<B1_VOICES;i++)if(b1_audio.voice[i].active)return 0u;
  return 1u;
 }
@@ -384,8 +369,8 @@ static void b1_autosave_service(void){
     (b1_auto_attempted && (uint32_t)(now-b1_auto_last_attempt_ms)<B1_AUTO_MIN_INTERVAL_MS) ||
     (b1_saved.state!=B1_STORAGE_READY&&b1_saved.state!=B1_STORAGE_EMPTY) ||
     !b1_autosave_quiet())return;
- /* Stop DMA before capturing a coherent snapshot, as with manual saves. */
- b1_stop_for_write();
+ /* Capture only panel-owned registration fields. Rendering changes voice
+  * and FX state, neither of which is serialized by b1_project_capture. */
  b1_pending_save=b1_saved.archive;
  b1_project_capture(&b1_pending_save.live,&b1_keys,&b1_audio);
  b1_pending_save.live_valid=1u;
@@ -395,12 +380,15 @@ static void b1_autosave_service(void){
   const uint8_t *a=(const uint8_t*)&b1_saved.archive.live,*b=(const uint8_t*)&b1_pending_save.live;
   for(uint32_t i=0;i<sizeof(struct b1_project);i++)if(a[i]!=b[i]){identical=0u;break;}
  }
- int rc=0;
- if(!identical)rc=b1_storage_commit(&b1_saved,&b1_flash_io,&b1_pending_save);
+ if(identical){b1_auto_pending=0u;return;}
+ fm1_irq_off();
+ if(!b1_autosave_quiet()){fm1_irq_enable_all();return;}
+ b1_stop_for_write(); /* Returns with IRQs enabled. */
+ int rc=b1_storage_commit(&b1_saved,&b1_flash_io,&b1_pending_save);
  b1_auto_last_attempt_ms=now;b1_auto_attempted=1u;
  if(!rc){
   b1_auto_pending=0u;
-  if(!identical){project_notice=3u;project_notice_until=now+1600u;b1_ui_dirty=1u;}
+  project_notice=3u;project_notice_until=now+1600u;b1_ui_dirty=1u;
  }
  b1_resume_after_write();
  if(rc){project_error=(int8_t)(rc<-100?-100:rc);b1_ui_dirty=1u;}
@@ -457,7 +445,17 @@ static void b1_refresh_leds(void){
   * The note range is 14..40 and the page light has its own fixed policy. */
  b1_apply_leds(&b1_keys,fm1_in.notes,ui_page,fm1_led_key);
 }
-static void b1_new_project(void){b1_release_all(&b1_keys,&b1_audio);b1_panic(&b1_audio);b1_reset(&b1_audio);b1_performance_init(&b1_keys);chord_cursor=20u;chord_quality=b1_keys.chord_map[chord_cursor];dirty_project=1u;}
+static void b1_new_project(void){
+ uint8_t relief=b1_audio.cpu_relief;
+ b1_release_all(&b1_keys,&b1_audio);
+ b1_panic(&b1_audio);
+ b1_reset(&b1_audio);
+ b1_audio.cpu_relief=relief;
+ b1_performance_init(&b1_keys);
+ chord_cursor=20u;
+ chord_quality=b1_keys.chord_map[chord_cursor];
+ dirty_project=1u;
+}
 /* Project transitions can zero tens of kilobytes and are intentionally not
  * allowed inside b1_controls' IRQ-masked edits. The audio IRQ keeps servicing
  * DMA with silence until the transition commits; other interrupts keep running.
@@ -557,8 +555,8 @@ static void b1_controls(uint32_t pressed){
   }
  }else if(pressed&(1u<<9)){ui_page=4u;changed=1;}
  if(ui_page!=4u)project_new_armed=0;
- int32_t enc[4]={fm1_enc_take(2),fm1_enc_take(3),fm1_enc_take(4),fm1_enc_take(5)};
- int32_t sel=fm1_enc_take(0),alg=fm1_enc_take(1);(void)fm1_enc_take(6);
+ int32_t enc[4]={fm1_enc_take_locked(2),fm1_enc_take_locked(3),fm1_enc_take_locked(4),fm1_enc_take_locked(5)};
+ int32_t sel=fm1_enc_take_locked(0),alg=fm1_enc_take_locked(1);(void)fm1_enc_take_locked(6);
  if(ui_page==9u){
   if(enc[0]){
    uint8_t next=(uint8_t)(enc[0]>0?B1_OSC_SAW:B1_OSC_ORGAN);
@@ -708,10 +706,8 @@ void fm1_cstart(void){
   int32_t start_gain=fm1_adc_read(FM1_ADC_MASTER);
   if(start_gain>=0)b1_master_target=(uint16_t)((start_gain*32767)/1023);
   b1_master_smoothed=0;
-  /* Boot in known-bounded sound mode. Promote full B3/Leslie only after
-   * clean DMA timing is observed and the keyboard is idle. If full DSP
-   * misses once, SAFE DSP remains for this boot instead of muting audio. */
-  b1_audio.cpu_relief=1u;b1_safe_latched=0u;b1_good_dma_blocks=0u;
+  /* Use the FM1 playback mode consistently across boot and project changes. */
+  b1_audio.cpu_relief=1u;b1_safe_latched=0u;
   for(uint32_t i=0;i<HALF_FRAMES*4;i++)b1_dma[i]=0;
   fm1_irq_off();fm1_audio_init(b1_dma,HALF_FRAMES*2,isr_alnk0,3);b1_audio_active=1;fm1_irq_enable_all();
   /* Silent DMA priming before the analog output gate opens. */
@@ -755,20 +751,7 @@ void fm1_cstart(void){
    * Raise diagnostic status and request reduced DSP load; leave DMA running.
    * A real driver fault remains visible instead of silently appearing as no sound. */
   if(b1_overrun && b1_audio_active){b1_overrun=0u;b1_cpu_relief=1u;b1_ui_dirty=1u;}
-  /* No gradual full/fast toggling while a key is held. A full DSP trial
-   * is allowed only after >=2s of consistently fast blocks and silence. */
-  if(b1_audio_active && !b1_safe_latched){
-   if(b1_force_safe){b1_audio.cpu_relief=1u;}
-   else if(b1_good_dma_blocks>=690u && !b1_keys.pressed){
-    uint8_t any=0u;
-    for(uint8_t v=0;v<B1_VOICES;v++)any|=b1_audio.voice[v].active;
-    /* Never auto-promote to high-cost Leslie/cabinet DSP on the FM1.
-     * Earlier releases repeatedly missed DMA deadlines, replayed stale
-     * PCM and sounded like never-ending ringing. Keep the stable path
-     * until a separately measured full-DSP mode is ready. */
-    (void)any;
-   }
-  }
+  if(b1_audio_active && b1_force_safe)b1_audio.cpu_relief=1u;
   if(b1_ms-ui_checked<10u){b1_cpu_wait_for_irq();continue;}
   ui_checked=b1_ms;
   if(!safe_mode && (b1_ms%50u)<10u){

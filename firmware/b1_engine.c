@@ -587,6 +587,37 @@ static void b1_advance_idle_clock(struct b1_engine *e,uint32_t frames){
   e->pull_smooth_q16[bank][h]=v;
  }
 }
+/* Consecutive samples from a single shared wheel. Expanding one wheel
+ * at a time keeps its phase, increment and weights local for the tile.
+ * The effect chain still consumes individual samples in chronological order. */
+#define B1_MIX_TILE 16u
+static inline int32_t b1_tile_tone(uint32_t phase,const int16_t *saw){
+ if(!saw)return b1_sine[phase>>21];
+ uint32_t index=phase>>23;
+ int32_t a=saw[index],b=saw[(index+1u)&511u];
+ return a+(((b-a)*(int32_t)((phase>>15)&255u))>>8);
+}
+static inline __attribute__((always_inline)) void b1_mix_tile(struct b1_engine *e, uint32_t count, int32_t *weighted,
+                          int32_t *leak,uint8_t use_saw){
+ for(uint32_t i=0;i<count;i++){weighted[i]=0;leak[i]=0;}
+ for(uint32_t j=0;j<e->mixed_wheel_count;j++){
+  uint8_t w=e->mixed_wheel_index[j];
+  uint32_t phase=e->wheel_phase[w], inc=e->wheel_inc[w];
+  int32_t gain=e->mixed_wheel_gain[w], bleed=e->mixed_wheel_leak[w], tone=0;
+  const int16_t *saw=use_saw?b1_saw_lut[e->osc_band[w]]:0;
+  if(bleed){
+   for(uint32_t i=0;i<count;i++){
+    phase+=inc;tone=b1_tile_tone(phase,saw);
+    weighted[i]+=tone*gain;leak[i]+=tone*bleed;
+   }
+  }else{
+   for(uint32_t i=0;i<count;i++){
+    phase+=inc;tone=b1_tile_tone(phase,saw);weighted[i]+=tone*gain;
+   }
+  }
+  e->wheel_phase[w]=phase;e->wheel_value[w]=tone;
+ }
+}
 void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
  if(!out)return;
 #ifndef B1_DISABLE_SMART_IDLE
@@ -717,20 +748,21 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    * tested the per-wheel memo stamp for every voice/harmonic, even where
    * multiple keys share one wheel. Build a sparse, unique wheel work-list
    * once per PCM block and render exactly those wheels once per sample.
-   * Only enable if each voice survives the whole block. Otherwise the old
-   * lazy path must decide per-sample which wheel was actually evaluated.
+   * Use the list while every voice survives. For the rest of the block the
+   * lazy path decides per sample which wheel was actually evaluated.
    * All 91 wheel phases remain free-running via the existing lazy clock. */
   uint8_t transient_wheels[B1_TONEWHEELS],transient_count=0u;
-  uint8_t transient_direct=0u;
+  uint32_t prefetch_frames=0u;
   if(!fast_mix && voiced_count>=3u && frames && frames<=4096u){
-   transient_direct=1u;
+   prefetch_frames=frames;
    for(uint32_t vi=0u;vi<voiced_count;vi++){
     const struct b1_voice *v=&e->voice[voiced_idx[vi]];
-    if(v->releasing && (uint32_t)v->envelope <= frames*256u){
-     transient_direct=0u;break;
+    if(v->releasing){
+     uint32_t audible=v->envelope?(v->envelope-1u)/256u:0u;
+     if(audible<prefetch_frames)prefetch_frames=audible;
     }
    }
-   if(transient_direct){
+   if(prefetch_frames){
     uint32_t seen[3]={0u,0u,0u}; /* 91 wheels, zero heap. */
     for(uint32_t vi=0u;vi<voiced_count;vi++){
      const struct b1_voice *v=&e->voice[voiced_idx[vi]];
@@ -755,7 +787,7 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
     for(uint32_t vi=0u;vi<voiced_count;vi++)
      terms+=(uint32_t)voice_bar_count[vi]+(e->leakage?1u:0u);
     if(terms<(uint32_t)transient_count+8u)
-     transient_direct=0u;
+     prefetch_frames=0u;
    }
   }
   /* Precomputing wheels must not change the per-voice processing order,
@@ -807,6 +839,21 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
     perc_wheels[perc_count++]=v->wheel[h];
   }
  }
+ /* During this prefix every listed wheel is used on every frame. Once a
+  * released contact expires the lazy sampler takes over for the survivors. */
+ const uint8_t sequential=(uint8_t)(prefetch_frames && e->cpu_relief &&
+   e->osc_mode==B1_OSC_ORGAN && !e->osc_blend_q15 &&
+   e->wheel_frame<=UINT32_MAX-prefetch_frames);
+ if(sequential){
+  for(uint32_t j=0;j<transient_count;j++){
+   uint8_t w=transient_wheels[j];
+   e->wheel_phase[w]+=(e->wheel_frame-e->wheel_phase_stamp[w])*e->wheel_inc[w];
+  }
+ }
+ const uint8_t tile_saw=(uint8_t)(e->osc_mode==B1_OSC_SAW && e->osc_blend_q15==32767u);
+ const uint8_t tiled=(uint8_t)(dense_defer_stamps && frames>=B1_MIX_TILE &&
+   (tile_saw || (e->cpu_relief && e->osc_mode==B1_OSC_ORGAN && !e->osc_blend_q15)));
+ int32_t tile_sum[B1_MIX_TILE],tile_leak[B1_MIX_TILE];
  for(uint32_t t=0;t<frames;t++){
   /* Smooth oscillator-mode switching without resetting playing notes or
    * 91 shared wheel phases. Zero overhead in the settled ORGAN state. */
@@ -829,8 +876,21 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    e->pull_smooth_q16[b][h]=ramp(e->pull_smooth_q16[b][h],dest,5u);
    smooth_gain[b][h]=(uint16_t)(e->pull_smooth_q16[b][h]>>8);
   }
+  uint8_t transient_direct=(uint8_t)(t<prefetch_frames);
   if(transient_direct){
-   if(e->cpu_relief && e->osc_mode==B1_OSC_ORGAN && e->osc_blend_q15==0u){
+   if(sequential){
+    for(uint32_t j=0;j<transient_count;j++){
+     uint8_t w=transient_wheels[j];
+     e->wheel_phase[w]+=e->wheel_inc[w];
+     e->wheel_value[w]=b1_sine[e->wheel_phase[w]>>21];
+    }
+    if((e->percussion_enabled && e->percussion_env) || t+1u==prefetch_frames){
+     for(uint32_t j=0;j<transient_count;j++){
+      uint8_t w=transient_wheels[j];
+      e->wheel_phase_stamp[w]=e->wheel_stamp[w]=e->wheel_frame;
+     }
+    }
+   }else if(e->cpu_relief && e->osc_mode==B1_OSC_ORGAN && e->osc_blend_q15==0u){
     /* V5.1: exact SAFE ORGAN lookup while the transient work-list is
      * prefetched. wheel_sample() would return this very same sine value.
      * Keep the lazy phase arithmetic and published stamps untouched. */
@@ -863,7 +923,15 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
     * blend is already at zero and ORGAN is the requested mode, so the
     * result and all cache/phase/stamp updates are bit-identical. The
     * general kernel remains for FULL DSP, transitions and SAW. */
-   if(dense_direct && e->cpu_relief && e->osc_mode==B1_OSC_ORGAN &&
+   if(tiled){
+    uint32_t i=t&(B1_MIX_TILE-1u);
+    if(!i){
+     uint32_t count=frames-t<B1_MIX_TILE?frames-t:B1_MIX_TILE;
+     if(tile_saw)b1_mix_tile(e,count,tile_sum,tile_leak,1u);
+     else b1_mix_tile(e,count,tile_sum,tile_leak,0u);
+    }
+    weighted_sum=tile_sum[i];leak_sum=tile_leak[i];
+   }else if(dense_direct && e->cpu_relief && e->osc_mode==B1_OSC_ORGAN &&
       e->osc_blend_q15==0u){
     if(!e->leakage){
      /* No per-wheel leakage loads/multiplications when leakage is OFF. */
@@ -913,7 +981,19 @@ void b1_render_stereo(struct b1_engine *e,int16_t *out,uint32_t frames){
    else if(v->envelope<32767u){uint32_t next=(uint32_t)v->envelope+1024u;v->envelope=(uint16_t)(next>32767u?32767u:next);}
    sounding_now=1u;
    int32_t sum=0;
-   for(uint32_t hi=0;hi<voice_bar_count[vi];hi++){
+   if(v->age>=38u){
+    const uint16_t *gain=smooth_gain[v->bank];
+    const uint8_t *bars=voice_bar_index[vi];
+    if(transient_direct){
+     for(uint32_t hi=0;hi<voice_bar_count[vi];hi++){
+      uint8_t h=bars[hi];sum+=e->wheel_value[v->wheel[h]]*(int32_t)gain[h];
+     }
+    }else{
+     for(uint32_t hi=0;hi<voice_bar_count[vi];hi++){
+      uint8_t h=bars[hi];sum+=shared_wheel_sample(e,v->wheel[h])*(int32_t)gain[h];
+     }
+    }
+   }else for(uint32_t hi=0;hi<voice_bar_count[vi];hi++){
     uint32_t h=voice_bar_index[vi][hi];
     /* drawbar level comes from the unchanged smoothed Q16 term below */
     uint8_t wheel=v->wheel[h];

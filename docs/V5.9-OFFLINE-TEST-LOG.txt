@@ -1,0 +1,38 @@
+PASS: native AC791N package, USB identity, embedded exact FWSC/SHA256, V16 warning
+PASS: pinned V5.8 reference engine and unchanged performance scheduler
+PASS: Puya/UCUN supported; unknown JEDEC safely fails closed
+PASS: 1,500,000 exact full-width checks (including fallback) against V5.1 64-bit ROCK arithmetic
+PASS: 2097152 DAC words and 4096 final gain/fade states vs V5.7 arithmetic
+PASS: old schema2 journal imported, new autosave restores, 12 named slots unchanged, power-loss rollback, foreign sectors untouched (1 sector erases)
+PASS V4.3 exact 1,100,000-column differential scans; 7227 input changes; baseline 4100000 key visits, fast 108153 (97.4% fewer)
+B1 V1.3: exact startup logo, hold, dissolve, HOME, 41-LED ripple PASS
+V2.8 live CHORD ATTACK: 0 simultaneous, 100 staggered, random first voice, sample scheduling, note-off cancel and persistence PASS
+PASS: mono envelope, all held upper notes, single trigger, lower separation, release
+PASS: safe ROCK responds to GAIN/DRIVE/CABINET, distinct from B3, peak=9389
+max FX DSP=0 12 voices all drawbars: peak=15118 absolute=879093525 PASS
+max FX DSP=1 12 voices all drawbars: peak=12493 absolute=639693102 PASS
+PASS: ownership loss before every DMA group and at the final check
+PASS: unchanged autosave, diagnostic tone, MIDI arriving at save boundary, real edit and project DSP reset
+PASS bench_v59_poly 32 V5.8/V5.9 PCM and engine-state scenarios
+PASS native_v59_poly_edges 64 V5.8/V5.9 PCM and engine-state scenarios
+PASS V5.1 vs V5.2: native_v45_poly_exact.c 96 full-state scenarios
+PASS V5.1 vs V5.2: native_v50_transition_exact.c 128 full-state scenarios
+PASS V5.1 vs V5.2: native_v51_full_state.c 96 full-state scenarios
+NOT A PHYSICAL FM1 CPU OR DMA DEADLINE MEASUREMENT
+PASS: 256-frame DMA buffer, deadline guard, fade-out and 64-frame crossfade bounds
+PASS /tmp/b1-v59-ota-na8lbibz/B1_V59_self.ufw rc=0 reads=2362 special=1 erases=5 writes=17 commits=1 ms=4788 stageId=ota-FM-1_015
+PASS /tmp/b1-v59-ota-na8lbibz/BEETLE_RC101.ufw rc=0 reads=2362 special=1 erases=5 writes=17 commits=1 ms=4788 stageId=ota-FM-1_015
+PASS /tmp/b1-v59-ota-na8lbibz/B1_V52_previous.ufw rc=0 reads=2362 special=1 erases=5 writes=17 commits=1 ms=4788 stageId=ota-FM-1_015
+PASS /tmp/b1-v59-ota-na8lbibz/Official_Open_V15_8entry.ufw rc=0 reads=2477 special=1 erases=5 writes=42 commits=1 ms=4981 stageId=ota-FM-1_015
+PASS /tmp/b1-v59-ota-na8lbibz/Official_V15_UCUN_FULLFLASH_BLOCKED.ufw rc=-27 reads=2435 special=0 erases=0 writes=0 commits=0 ms=4867 stageId=
+PASS /tmp/b1-v59-ota-na8lbibz/Foreign_recompiled_loader_REJECT.ufw rc=-16 reads=2348 special=0 erases=0 writes=0 commits=0 ms=4688 stageId=
+PASS /tmp/b1-v59-ota-na8lbibz/Foreign_longer_loader_REJECT.ufw rc=-16 reads=2347 special=0 erases=0 writes=0 commits=0 ms=4687 stageId=
+PASS /tmp/b1-v59-ota-na8lbibz/No_success.ufw rc=-13 reads=2365 special=4 erases=10 writes=16 commits=0 ms=4791 stageId=
+PASS /tmp/b1-v59-ota-na8lbibz/Abort.ufw rc=-25 reads=27 special=0 erases=0 writes=0 commits=0 ms=51 stageId=
+PASS /tmp/b1-v59-ota-na8lbibz/Erase_failure.ufw rc=-17 reads=2361 special=0 erases=2 writes=0 commits=0 ms=4787 stageId=
+PASS /tmp/b1-v59-ota-na8lbibz/Readback_corrupt.ufw rc=-18 reads=2361 special=0 erases=10 writes=15 commits=0 ms=4787 stageId=
+PASS /tmp/b1-v59-ota-na8lbibz/Unknown_V16_boot_REJECT.ufw rc=-29 reads=2361 special=0 erases=0 writes=0 commits=0 ms=4747 stageId=
+PASS /tmp/b1-v59-ota-na8lbibz/Bad_XIP.ufw rc=-24 reads=2333 special=0 erases=0 writes=0 commits=0 ms=4659 stageId=
+V5.9 OTA replay completed: successful transfers are HOST simulations, not FM1 hardware proof.
+PASS: browser installer JavaScript syntax
+PASS: B1 V5.9 offline release validation. Physical FM1 end-to-end NOT TESTED.

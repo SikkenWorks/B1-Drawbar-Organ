@@ -1,5 +1,18 @@
 # Changelog
 
+## V5.9 (2026-11-26)
+
+- Group sustained ORGAN and SAW wheel calculations in 16-frame tiles when percussion no longer reads the sample cache. Keep FX in sample order.
+- Keep shared-wheel evaluation active until the earliest releasing voice expires. Reuse settled contact gains in the attack and release mixer.
+- See [polyphony measurements](docs/V5.9-POLYPHONY.md) for the comparison to V5.8.
+
+## V5.8 (2026-11-26)
+
+- Prepare master output before DMA commit, use a steady-volume fast path and check ownership every 16 stereo frames. Include failed blocks in diagnostics.
+- Preserve interrupt masking during encoder edits and retain the running DSP profile when creating a project.
+- Skip silent codec restarts for identical autosave snapshots and check for incoming MIDI again before a real flash write.
+- See [verification results](docs/V5.8-VALIDATION-REPORT.md) and [build instructions](docs/BUILD-V5.8.md).
+
 ## V5.7 — FM1 flash compatibility and native OTA recovery audit (2026-11-26)
 
 - **New FM1 hardware:** read JEDEC in the real boot sequence, accept both Puya P25Q80H `0x856014` and UCUN UC25HQ80 `0xB36014` for B1-owned writes; any unknown chip fails closed without disabling USB-MIDI, the organ or the independent bootloader shortcut. Project storage still uses its original two-sector journal and never erases unknown sectors.

@@ -602,13 +602,20 @@ static inline void fm1__unlock(uint32_t v)
 }
 
 /* detent steps turned since the last call, + = clockwise */
+/* The caller already holds the input/audio IRQ critical section. */
+static inline int32_t fm1_enc_take_locked(uint32_t e)
+{
+    int32_t steps = fm1_in.enc_steps[e];
+    fm1_in.enc_steps[e] = 0;
+    return steps;
+}
+
 static int32_t fm1_enc_take(uint32_t e)
 {
     uint32_t k = fm1__lock();
-    int32_t s = fm1_in.enc_steps[e];
-    fm1_in.enc_steps[e] = 0;
+    int32_t steps = fm1_enc_take_locked(e);
     fm1__unlock(k);
-    return s;
+    return steps;
 }
 
 static uint32_t fm1_input_edges(uint32_t *released)
